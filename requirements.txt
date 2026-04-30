@@ -1,0 +1,2 @@
+# Runtime dependencies for Tradie Reception.
+flask>=3.1
