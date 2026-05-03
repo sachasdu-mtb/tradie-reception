@@ -1,3 +1,4 @@
-# Runtime dependencies for Tradie Reception.
 flask>=3.0.0
 gunicorn>=21.0.0
+gspread>=6.0.0
+google-auth>=2.0.0

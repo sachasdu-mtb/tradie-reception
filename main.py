@@ -1,23 +1,19 @@
 """
 Tradie Receptionist - SMS webhook handler
-Version 0.1 - Plumbing only
+Version 0.2 - Sheets lookup added
 
-This first version receives Twilio SMS webhooks and replies with a
-hardcoded message. No Claude or Sheets integration yet - we're proving
-the webhook plumbing works on Replit before adding layers.
-
-Run with: python3 main.py
-The Flask server starts on port 8080 (Replit's default exposed port).
+Layer 2: when an SMS arrives, identify which tradie was contacted by
+matching the inbound `To` number against the Client tab in Google Sheets.
+Logs the result; reply is still hardcoded (changes in Layer 3).
 """
 
 import logging
 import os
+from typing import Optional
 
-from flask import Flask, request, Response            
-
-# ---------------------------------------------------------------------------
-# Setup
-# ---------------------------------------------------------------------------
+import gspread
+from flask import Flask, request, Response
+from google.oauth2.service_account import Credentials
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,36 +23,54 @@ log = logging.getLogger("receptionist")
 
 app = Flask(__name__)
 
+SHEET_ID = os.environ["GOOGLE_SHEET_ID"]
+GOOGLE_CREDS_PATH = "/etc/secrets/google-credentials.json"
 
-# ---------------------------------------------------------------------------
-# Health check
-# ---------------------------------------------------------------------------
+
+def _build_sheets_client() -> gspread.Client:
+    """Authenticate with the service account and return a gspread client."""
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = Credentials.from_service_account_file(GOOGLE_CREDS_PATH, scopes=scopes)
+    return gspread.authorize(creds)
+
+
+try:
+    sheets_client = _build_sheets_client()
+    spreadsheet = sheets_client.open_by_key(SHEET_ID)
+    log.info("Sheets client initialised. Spreadsheet: %s", spreadsheet.title)
+except Exception as exc:
+    log.exception("Failed to initialise Sheets client: %s", exc)
+    sheets_client = None
+    spreadsheet = None
+
+
+def find_tradie(to_number: str) -> Optional[dict]:
+    """Look up the tradie row whose phone_number matches to_number."""
+    if spreadsheet is None:
+        log.error("Sheets client not initialised; cannot look up tradie")
+        return None
+    try:
+        client_tab = spreadsheet.worksheet("Client")
+        rows = client_tab.get_all_records()
+    except Exception as exc:
+        log.exception("Failed to read Client tab: %s", exc)
+        return None
+    for row in rows:
+        if row.get("phone_number", "").strip() == to_number.strip():
+            return row
+    return None
+
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    """Visiting the Repl URL in a browser hits this. Confirms the app is up."""
-    return "Tradie Receptionist v0.1 - alive"
+    return "Tradie Receptionist v0.2 - alive (Sheets lookup enabled)"
 
-
-# ---------------------------------------------------------------------------
-# Twilio SMS webhook
-# ---------------------------------------------------------------------------
 
 @app.route("/sms", methods=["POST"])
 def sms_webhook() -> Response:
-    """
-    Receives an incoming SMS from Twilio.
-
-    Twilio sends form-encoded POST data with fields like:
-      From   - the customer's number  (e.g. +61402585413)
-      To     - the tradie's number    (e.g. +61485050078)
-      Body   - the message text
-      MessageSid - Twilio's unique ID for this message
-
-    We respond with TwiML (Twilio's XML format) that tells Twilio what to
-    SMS back to the customer.
-    """
-    # Read incoming fields
     from_number = request.form.get("From", "")
     to_number = request.form.get("To", "")
     body = request.form.get("Body", "")
@@ -67,9 +81,24 @@ def sms_webhook() -> Response:
         from_number, to_number, message_sid, body,
     )
 
-    # For v0.1 we just reply with a hardcoded greeting.
-    # Later we'll: lookup tradie -> fetch history -> call Claude -> reply.
-    reply_text = "Hi, I'm Alex. (This is v0.1 plumbing - real responses coming soon.)"
+    tradie = find_tradie(to_number)
+
+    if tradie is None:
+        log.warning("No tradie found in Client tab for To=%s", to_number)
+        reply_text = (
+            "Sorry, this number isn't currently set up. "
+            "Please try a different number."
+        )
+    else:
+        log.info(
+            "Tradie matched: %s (%s)",
+            tradie.get("business_name", "<no name>"),
+            to_number,
+        )
+        reply_text = (
+            f"Hi, I'm Alex from {tradie.get('business_name', 'this business')}. "
+            "(v0.2 plumbing - real responses in Layer 3.)"
+        )
 
     twiml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
@@ -77,32 +106,22 @@ def sms_webhook() -> Response:
         f'<Message>{reply_text}</Message>'
         '</Response>'
     )
-
     return Response(twiml, mimetype="application/xml")
 
 
-# ---------------------------------------------------------------------------
-# Local test endpoint (optional, for development without Twilio)
-# ---------------------------------------------------------------------------
-
 @app.route("/test", methods=["GET"])
 def test() -> str:
-    """
-    Lets you simulate a webhook from a browser without needing Twilio.
-    Visit:  https://<your-repl-url>/test?body=hello
-    """
-    fake_body = request.args.get("body", "test message")
-    log.info("Test endpoint hit with body=%r", fake_body)
-    return f"Test OK. You sent: {fake_body!r}"
+    """Visit /test?to=+61485050078 to simulate a tradie lookup."""
+    to_number = request.args.get("to", "")
+    if not to_number:
+        return "Pass ?to=+614xxxxxxxx to test a lookup"
+    tradie = find_tradie(to_number)
+    if tradie is None:
+        return f"No tradie matched for {to_number}"
+    return f"Matched: {tradie.get('business_name', '<no name>')}"
 
-
-# ---------------------------------------------------------------------------
-# Entrypoint
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # Replit exposes port 8080 by default; binding to 0.0.0.0 lets external
-    # traffic reach the server (critical - without this Twilio can't connect).
     port = int(os.environ.get("PORT", 8080))
     log.info("Starting Tradie Receptionist on port %d", port)
     app.run(host="0.0.0.0", port=port, debug=False)
