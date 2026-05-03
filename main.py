@@ -65,7 +65,7 @@ def find_tradie(to_number: str) -> Optional[dict]:
         sheet_phone = row.get("phone_number", "")
         log.info("  row %d: phone_number=%r business_name=%r match=%s",
                  i, sheet_phone, row.get("business_name", ""),
-                 sheet_phone.strip() == to_number.strip())
+                 str(sheet_phone).strip() == str(to_number).strip())
         if sheet_phone.strip() == to_number.strip():
             return row
 
