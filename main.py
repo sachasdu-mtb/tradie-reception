@@ -1,10 +1,6 @@
 """
 Tradie Receptionist - SMS webhook handler
-Version 0.2.1 - Sheets lookup with diagnostic logging
-
-Adds debug logging to find_tradie() to expose what gspread is actually
-reading from the Client tab. Once the lookup is verified working,
-the verbose logging gets removed.
+Version 0.3 - clean rebuild with type-safe phone matching
 """
 
 import logging
@@ -27,6 +23,10 @@ SHEET_ID = os.environ["GOOGLE_SHEET_ID"]
 GOOGLE_CREDS_PATH = "/etc/secrets/google-credentials.json"
 
 
+# ---------------------------------------------------------------------------
+# Sheets client (initialised once at startup)
+# ---------------------------------------------------------------------------
+
 def _build_sheets_client() -> gspread.Client:
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -46,11 +46,37 @@ except Exception as exc:
     spreadsheet = None
 
 
+# ---------------------------------------------------------------------------
+# Phone normalisation
+# ---------------------------------------------------------------------------
+
+def _normalise_phone(value) -> str:
+    """
+    Convert any cell value to a clean E.164-ish string for comparison.
+
+    Handles:
+      - ints (when Sheets stores phone as number, dropping leading +)
+      - strings with or without leading +
+      - stray whitespace
+
+    Returns a string with leading + if the value looks like a number.
+    """
+    s = str(value).strip()
+    if s and not s.startswith("+") and s.isdigit():
+        s = "+" + s
+    return s
+
+
+# ---------------------------------------------------------------------------
+# Tradie lookup
+# ---------------------------------------------------------------------------
+
 def find_tradie(to_number: str) -> Optional[dict]:
     """Look up the tradie row whose phone_number matches to_number."""
     if spreadsheet is None:
         log.error("Sheets client not initialised; cannot look up tradie")
         return None
+
     try:
         client_tab = spreadsheet.worksheet("Client")
         rows = client_tab.get_all_records()
@@ -58,78 +84,67 @@ def find_tradie(to_number: str) -> Optional[dict]:
         log.exception("Failed to read Client tab: %s", exc)
         return None
 
-    # DIAGNOSTIC: log what we received and what we're comparing against.
-    log.info("find_tradie searching for to_number=%r among %d rows",
-             to_number, len(rows))
+    target = _normalise_phone(to_number)
+    log.info("find_tradie searching for to_number=%r among %d rows", target, len(rows))
+
     for i, row in enumerate(rows):
-        sheet_phone = row.get("phone_number", "")
-        log.info("  row %d: phone_number=%r business_name=%r match=%s",
-                 i, sheet_phone, row.get("business_name", ""),
-                 str(sheet_phone).strip() == str(to_number).strip())
-        if sheet_phone.strip() == to_number.strip():
+        sheet_phone = _normalise_phone(row.get("phone_number", ""))
+        match = sheet_phone == target
+        log.info(
+            "  row %d: phone_number=%s business_name=%r match=%s",
+            i, sheet_phone, row.get("business_name", ""), match,
+        )
+        if match:
             return row
 
     return None
 
 
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Tradie Receptionist v0.2.1 - alive (Sheets lookup with diagnostics)"
+    return "Tradie Receptionist v0.3 - alive (clean rebuild)"
+
+
+@app.route("/test", methods=["GET"])
+def test() -> str:
+    to = request.args.get("to", "")
+    if not to:
+        return "Pass ?to=+61... to look up a tradie"
+    tradie = find_tradie(to)
+    if tradie:
+        return f"Matched: {tradie.get('business_name', '(no name)')}"
+    return f"No tradie matched for {to}"
 
 
 @app.route("/sms", methods=["POST"])
 def sms_webhook() -> Response:
     from_number = request.form.get("From", "")
     to_number = request.form.get("To", "")
+    sid = request.form.get("MessageSid", "")
     body = request.form.get("Body", "")
-    message_sid = request.form.get("MessageSid", "")
-
     log.info(
         "Inbound SMS | From=%s To=%s Sid=%s Body=%r",
-        from_number, to_number, message_sid, body,
+        from_number, to_number, sid, body,
     )
 
     tradie = find_tradie(to_number)
-
-    if tradie is None:
+    if not tradie:
         log.warning("No tradie found in Client tab for To=%s", to_number)
-        reply_text = (
-            "Sorry, this number isn't currently set up. "
-            "Please try a different number."
+        twiml = (
+            "<?xml version='1.0' encoding='UTF-8'?>"
+            "<Response><Message>Sorry, this number isn't configured yet.</Message></Response>"
         )
-    else:
-        log.info(
-            "Tradie matched: %s (%s)",
-            tradie.get("business_name", "<no name>"),
-            to_number,
-        )
-        reply_text = (
-            f"Hi, I'm Alex from {tradie.get('business_name', 'this business')}. "
-            "(v0.2 plumbing - real responses in Layer 3.)"
-        )
+        return Response(twiml, mimetype="application/xml")
 
+    business = tradie.get("business_name", "your tradie")
+    log.info("Tradie matched: %s (%s)", business, to_number)
+    reply = f"Hi, I'm Alex from {business}. (v0.3 - real LLM responses in Layer 3.)"
     twiml = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<Response>'
-        f'<Message>{reply_text}</Message>'
-        '</Response>'
+        f"<?xml version='1.0' encoding='UTF-8'?>"
+        f"<Response><Message>{reply}</Message></Response>"
     )
     return Response(twiml, mimetype="application/xml")
-
-
-@app.route("/test", methods=["GET"])
-def test() -> str:
-    """Visit /test?to=+61485050078 to simulate a tradie lookup."""
-    to_number = request.args.get("to", "")
-    if not to_number:
-        return "Pass ?to=+614xxxxxxxx to test a lookup"
-    tradie = find_tradie(to_number)
-    if tradie is None:
-        return f"No tradie matched for {to_number}"
-    return f"Matched: {tradie.get('business_name', '<no name>')}"
-
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    log.info("Starting Tradie Receptionist on port %d", port)
-    app.run(host="0.0.0.0", port=port, debug=False)
