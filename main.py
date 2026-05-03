@@ -1,10 +1,10 @@
 """
 Tradie Receptionist - SMS webhook handler
-Version 0.2 - Sheets lookup added
+Version 0.2.1 - Sheets lookup with diagnostic logging
 
-Layer 2: when an SMS arrives, identify which tradie was contacted by
-matching the inbound `To` number against the Client tab in Google Sheets.
-Logs the result; reply is still hardcoded (changes in Layer 3).
+Adds debug logging to find_tradie() to expose what gspread is actually
+reading from the Client tab. Once the lookup is verified working,
+the verbose logging gets removed.
 """
 
 import logging
@@ -28,7 +28,6 @@ GOOGLE_CREDS_PATH = "/etc/secrets/google-credentials.json"
 
 
 def _build_sheets_client() -> gspread.Client:
-    """Authenticate with the service account and return a gspread client."""
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
@@ -58,15 +57,24 @@ def find_tradie(to_number: str) -> Optional[dict]:
     except Exception as exc:
         log.exception("Failed to read Client tab: %s", exc)
         return None
-    for row in rows:
-        if row.get("phone_number", "").strip() == to_number.strip():
+
+    # DIAGNOSTIC: log what we received and what we're comparing against.
+    log.info("find_tradie searching for to_number=%r among %d rows",
+             to_number, len(rows))
+    for i, row in enumerate(rows):
+        sheet_phone = row.get("phone_number", "")
+        log.info("  row %d: phone_number=%r business_name=%r match=%s",
+                 i, sheet_phone, row.get("business_name", ""),
+                 sheet_phone.strip() == to_number.strip())
+        if sheet_phone.strip() == to_number.strip():
             return row
+
     return None
 
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Tradie Receptionist v0.2 - alive (Sheets lookup enabled)"
+    return "Tradie Receptionist v0.2.1 - alive (Sheets lookup with diagnostics)"
 
 
 @app.route("/sms", methods=["POST"])
