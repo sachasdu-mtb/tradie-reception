@@ -1,6 +1,6 @@
 """
 Tradie Receptionist - SMS webhook handler
-Version 0.4 - Layer 3: Claude-generated replies + structured client config
+Version 0.4.1 - Layer 3 + emoji-free SMS replies
 """
 
 import logging
@@ -31,15 +31,16 @@ ASSISTANT_NAME = "Joe"
 # ===========================================================================
 # Prompt template
 # ===========================================================================
-# Edit these constants to change behaviour for ALL tradies at once.
-# Per-tradie variation comes from the structured fields in the Client tab.
 
 SMS_INSTRUCTION = (
     "IMPORTANT: This conversation is over SMS. Keep every reply under "
     "320 characters (about 2 SMS segments). Be concise but warm. Each reply "
     "should move the customer toward either (a) a quoted price, or "
     "(b) a booked on-site visit via the booking link. Ask only for the "
-    "minimum info needed."
+    "minimum info needed.\n"
+    "\n"
+    "Do NOT use emojis. Do NOT use exclamation-heavy or overly casual "
+    "language. Plain professional Aussie tone — friendly but no theatrics."
 )
 
 REPLY_PLAYBOOK = (
@@ -198,7 +199,7 @@ def generate_reply(tradie: dict, user_message: str) -> str:
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Tradie Receptionist v0.4 - alive (Layer 3: Claude replies, structured config)"
+    return "Tradie Receptionist v0.4.1 - alive (Layer 3, no emoji)"
 
 
 @app.route("/test", methods=["GET"])
