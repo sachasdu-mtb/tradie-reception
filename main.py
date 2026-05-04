@@ -1,6 +1,6 @@
 """
 Tradie Receptionist - SMS webhook handler
-Version 0.6 - Layers 5 + 6: multi-turn memory + urgent owner escalation
+Version 0.6.1 - fix: Conversation Log write uses RAW; history filter normalises phones
 """
 
 import logging
@@ -36,7 +36,6 @@ CONVERSATION_LOG_HEADERS = [
 ]
 URGENT_TAG = "##URGENT##"
 
-# Conversation memory window: last N round-trips OR last X hours, whichever is shorter.
 HISTORY_TURN_LIMIT = 6
 HISTORY_HOURS_LIMIT = 24
 
@@ -148,7 +147,7 @@ def _normalise_phone(value) -> str:
 
 
 # ===========================================================================
-# Conversation Log (Layer 4) + history retrieval (Layer 5)
+# Conversation Log + history retrieval
 # ===========================================================================
 
 def _ensure_conversation_log_tab():
@@ -179,9 +178,6 @@ def _ensure_conversation_log_tab():
 
 
 def get_conversation_history(from_number: str, to_number: str) -> list[dict]:
-    """Return alternating user/assistant message dicts for this conversation pair,
-    capped at HISTORY_TURN_LIMIT turns and HISTORY_HOURS_LIMIT hours.
-    """
     tab = _ensure_conversation_log_tab()
     if tab is None:
         return []
@@ -193,16 +189,18 @@ def get_conversation_history(from_number: str, to_number: str) -> list[dict]:
         return []
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=HISTORY_HOURS_LIMIT)
+    target_from = _normalise_phone(from_number)
+    target_to = _normalise_phone(to_number)
 
     matching = []
     for row in rows:
-        if str(row.get("from_number", "")).strip() != from_number:
-            continue
-        if str(row.get("to_number", "")).strip() != to_number:
+        row_from = _normalise_phone(row.get("from_number", ""))
+        row_to = _normalise_phone(row.get("to_number", ""))
+        if row_from != target_from or row_to != target_to:
             continue
         try:
-            ts = datetime.fromisoformat(str(row["timestamp"]).strip())
-        except (ValueError, KeyError, TypeError):
+            ts = datetime.fromisoformat(str(row.get("timestamp", "")).strip())
+        except (ValueError, TypeError):
             continue
         if ts < cutoff:
             continue
@@ -214,11 +212,12 @@ def get_conversation_history(from_number: str, to_number: str) -> list[dict]:
     for row in matching:
         msg = str(row.get("message", "")).strip()
         rep = str(row.get("reply", "")).strip()
-        if msg and rep:  # only include complete turns; preserves alternation
+        if msg and rep:
             messages.append({"role": "user", "content": msg})
             messages.append({"role": "assistant", "content": rep})
 
-    log.info("Loaded %d historical turns for %s -> %s", len(messages) // 2, from_number, to_number)
+    log.info("Loaded %d historical turns for %s -> %s",
+             len(messages) // 2, target_from, target_to)
     return messages
 
 
@@ -230,7 +229,9 @@ def log_conversation(
     reply: str,
     is_urgent: bool,
 ) -> None:
-    """Append a turn to the Conversation Log. Best-effort."""
+    """Append a turn to the Conversation Log. Best-effort. Uses RAW input so
+    Sheets does not reformat timestamps or strip leading + on phone numbers.
+    """
     tab = _ensure_conversation_log_tab()
     if tab is None:
         log.error("Cannot log conversation: tab unavailable")
@@ -241,7 +242,7 @@ def log_conversation(
         tab.append_row(
             [timestamp, business_name, from_number, to_number, message, reply,
              "TRUE" if is_urgent else "FALSE"],
-            value_input_option="USER_ENTERED",
+            value_input_option="RAW",
         )
         log.info("Conversation logged (urgent=%s)", is_urgent)
     except Exception as exc:
@@ -249,7 +250,7 @@ def log_conversation(
 
 
 # ===========================================================================
-# Owner escalation (Layer 6)
+# Owner escalation
 # ===========================================================================
 
 def send_owner_alert(
@@ -258,7 +259,6 @@ def send_owner_alert(
     customer_message: str,
     joe_reply: str,
 ) -> None:
-    """SMS the tradie's owner_mobile when a conversation is flagged urgent. Best-effort."""
     if twilio_client is None:
         log.error("Cannot send urgent alert: Twilio client not initialised")
         return
@@ -355,7 +355,7 @@ def generate_reply(tradie: dict, user_message: str, history: list[dict]) -> str:
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Tradie Receptionist v0.6 - alive (Layers 5+6: history + urgent escalation)"
+    return "Tradie Receptionist v0.6.1 - alive (Layers 5+6, history fix)"
 
 
 @app.route("/test", methods=["GET"])
@@ -403,20 +403,14 @@ def sms_webhook() -> Response:
     business = tradie.get("business_name", "your tradie")
     log.info("Tradie matched: %s (%s)", business, to_number)
 
-    # Layer 5 — pull recent history for this conversation pair
     history = get_conversation_history(from_number, to_number)
-
-    # Generate reply with history as context
     raw_reply = generate_reply(tradie, body, history)
 
-    # Detect & strip the urgent tag (customer never sees it)
     is_urgent = URGENT_TAG in raw_reply
     clean_reply = raw_reply.replace(URGENT_TAG, "").strip()
 
-    # Log the turn (Layer 4)
     log_conversation(business, from_number, to_number, body, clean_reply, is_urgent)
 
-    # Layer 6 — escalate to owner if urgent
     if is_urgent:
         send_owner_alert(tradie, from_number, body, clean_reply)
 
