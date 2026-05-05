@@ -1,6 +1,6 @@
 """
 Tradie Receptionist - SMS webhook handler
-Version 0.7 - tradie-side MUTE/UNMUTE + forward muted messages to owner
+Version 0.7.1 - tightened prompt guardrails: no inference beyond Sheet data
 """
 
 import logging
@@ -61,6 +61,22 @@ SMS_INSTRUCTION = (
     "language. Plain professional Aussie tone — friendly but no theatrics."
 )
 
+# Strict guardrails that prevent Joe from inventing or extrapolating beyond
+# what is explicitly written in the tradie's Sheet row.
+GUARDRAILS = (
+    "STRICT RULES — these override anything else:\n"
+    "- Use ONLY the services explicitly listed in 'Services we offer'. "
+    "Do NOT expand abbreviations, do NOT infer related services, do NOT "
+    "guess at what the trade type might include. If a service isn't on the "
+    "list, you don't offer it.\n"
+    "- If a customer asks about something not on the list, say you'll need "
+    "to check with the tradie and offer to take their details.\n"
+    "- Do NOT invent prices, fees, timeframes, qualifications, or guarantees "
+    "that aren't written above.\n"
+    "- Do NOT speculate about the meaning of trade names or abbreviations. "
+    "If unsure what the customer means, ask them rather than guess."
+)
+
 REPLY_PLAYBOOK = (
     "When a customer messages, your job is to:\n"
     "1. Greet warmly and confirm we cover what they need (only on the FIRST "
@@ -72,8 +88,7 @@ REPLY_PLAYBOOK = (
     "4. If genuinely urgent (gas leak, flooding, no power, electrical "
     "danger, etc.), end your reply with ##URGENT## on its own line\n"
     "\n"
-    "Be honest. Do not invent prices outside the ranges given. If you don't "
-    "know something, say you'll get the tradie to confirm."
+    "Be honest. If you don't know something, say you'll get the tradie to confirm."
 )
 
 
@@ -96,6 +111,8 @@ def _build_system_prompt(tradie: dict) -> str:
     add_if("Pricing", tradie.get("pricing_notes"))
     add_if("Booking link", tradie.get("cal_link"))
 
+    parts.append("")
+    parts.append(GUARDRAILS)
     parts.append("")
     parts.append(REPLY_PLAYBOOK)
     parts.append("")
@@ -157,7 +174,6 @@ def _normalise_phone(value) -> str:
 # ===========================================================================
 
 def _ensure_tab(name: str, headers: list[str]):
-    """Return the worksheet, creating it with headers if missing."""
     if spreadsheet is None:
         return None
     try:
@@ -256,7 +272,6 @@ def log_conversation(
 # ===========================================================================
 
 def is_muted(business_name: str, customer_number: str) -> bool:
-    """Return True if there is an unexpired mute for this tradie+customer."""
     tab = _ensure_tab(MUTES_TAB, MUTES_HEADERS)
     if tab is None:
         return False
@@ -286,7 +301,6 @@ def is_muted(business_name: str, customer_number: str) -> bool:
 
 
 def add_mute(business_name: str, customer_number: str) -> Optional[datetime]:
-    """Add a mute row valid for MUTE_HOURS hours. Returns expiry datetime."""
     tab = _ensure_tab(MUTES_TAB, MUTES_HEADERS)
     if tab is None:
         return None
@@ -309,7 +323,6 @@ def add_mute(business_name: str, customer_number: str) -> Optional[datetime]:
 
 
 def expire_mutes(business_name: str, customer_number: str) -> int:
-    """Force any active mutes for this customer to expire now. Returns count."""
     tab = _ensure_tab(MUTES_TAB, MUTES_HEADERS)
     if tab is None:
         return 0
@@ -328,8 +341,6 @@ def expire_mutes(business_name: str, customer_number: str) -> int:
     now_iso = now.isoformat(timespec="seconds")
     count = 0
 
-    # Header row is row 1; data starts at row 2. Columns: A timestamp B business_name
-    # C customer_number D expires_at.
     for idx, row in enumerate(rows[1:], start=2):
         if len(row) < 4:
             continue
@@ -343,7 +354,6 @@ def expire_mutes(business_name: str, customer_number: str) -> int:
             continue
         if expires <= now:
             continue
-        # Update column D (expires_at) to now
         try:
             tab.update_cell(idx, 4, now_iso)
             count += 1
@@ -355,7 +365,7 @@ def expire_mutes(business_name: str, customer_number: str) -> int:
 
 
 # ===========================================================================
-# Tradie SMS commands (MUTE / UNMUTE)
+# Tradie SMS commands
 # ===========================================================================
 
 MUTE_HELP = (
@@ -366,8 +376,6 @@ MUTE_HELP = (
 
 
 def handle_tradie_command(tradie: dict, command_body: str) -> str:
-    """Parse a MUTE/UNMUTE command from the tradie. Returns the confirmation
-    text to send back to the tradie (never empty)."""
     business = tradie.get("business_name") or "the business"
     parts = command_body.strip().split(maxsplit=1)
     if not parts:
@@ -397,11 +405,10 @@ def handle_tradie_command(tradie: dict, command_body: str) -> str:
 
 
 # ===========================================================================
-# Owner forwarding (urgent + muted-customer messages)
+# Owner forwarding
 # ===========================================================================
 
 def send_to_owner(tradie: dict, body: str) -> bool:
-    """Send an SMS from the tradie's Twilio number to their owner_mobile."""
     if twilio_client is None:
         log.error("Cannot SMS owner: Twilio client not initialised")
         return False
@@ -511,7 +518,7 @@ def generate_reply(tradie: dict, user_message: str, history: list[dict]) -> str:
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Tradie Receptionist v0.7 - alive (mute/unmute + forward)"
+    return "Tradie Receptionist v0.7.1 - alive (guardrails + mute)"
 
 
 @app.route("/test", methods=["GET"])
@@ -545,7 +552,6 @@ def _twiml_message(text: str) -> Response:
 
 
 def _twiml_empty() -> Response:
-    """Return an empty TwiML response — no SMS sent to the customer."""
     twiml = "<?xml version='1.0' encoding='UTF-8'?><Response></Response>"
     return Response(twiml, mimetype="application/xml")
 
@@ -569,7 +575,6 @@ def sms_webhook() -> Response:
     business = tradie.get("business_name", "your tradie")
     log.info("Tradie matched: %s (%s)", business, to_number)
 
-    # ---- Tradie command path -------------------------------------------
     sender = _normalise_phone(from_number)
     owner = _normalise_phone(tradie.get("owner_mobile", ""))
     body_stripped = body.strip()
@@ -579,15 +584,12 @@ def sms_webhook() -> Response:
         confirmation = handle_tradie_command(tradie, body_stripped)
         return _twiml_message(confirmation)
 
-    # ---- Muted-customer path -------------------------------------------
     if is_muted(business, from_number):
         log.info("Customer %s is muted for %s; forwarding only", from_number, business)
         send_muted_forward(tradie, from_number, body)
-        # Log the inbound with a blank reply so transcripts stay complete
         log_conversation(business, from_number, to_number, body, "", False)
         return _twiml_empty()
 
-    # ---- Normal customer path ------------------------------------------
     history = get_conversation_history(from_number, to_number)
     raw_reply = generate_reply(tradie, body, history)
 
