@@ -1,6 +1,6 @@
 """
 Tradie Receptionist - SMS webhook handler
-Version 0.6.1 - fix: Conversation Log write uses RAW; history filter normalises phones
+Version 0.7 - tradie-side MUTE/UNMUTE + forward muted messages to owner
 """
 
 import logging
@@ -29,12 +29,18 @@ TWILIO_AUTH_TOKEN = os.environ["TWILIO_AUTH_TOKEN"]
 GOOGLE_CREDS_PATH = "/etc/secrets/google-credentials.json"
 
 ASSISTANT_NAME = "Joe"
+
 CONVERSATION_LOG_TAB = "Conversation Log"
 CONVERSATION_LOG_HEADERS = [
     "timestamp", "business_name", "from_number", "to_number",
     "message", "reply", "urgent",
 ]
+
+MUTES_TAB = "Mutes"
+MUTES_HEADERS = ["timestamp", "business_name", "customer_number", "expires_at"]
+
 URGENT_TAG = "##URGENT##"
+MUTE_HOURS = 24
 
 HISTORY_TURN_LIMIT = 6
 HISTORY_HOURS_LIMIT = 24
@@ -147,38 +153,36 @@ def _normalise_phone(value) -> str:
 
 
 # ===========================================================================
-# Conversation Log + history retrieval
+# Worksheet helpers
 # ===========================================================================
 
-def _ensure_conversation_log_tab():
+def _ensure_tab(name: str, headers: list[str]):
+    """Return the worksheet, creating it with headers if missing."""
     if spreadsheet is None:
         return None
     try:
-        return spreadsheet.worksheet(CONVERSATION_LOG_TAB)
+        return spreadsheet.worksheet(name)
     except gspread.exceptions.WorksheetNotFound:
-        log.info("Conversation Log tab not found; creating it")
+        log.info("%s tab not found; creating it", name)
         try:
-            tab = spreadsheet.add_worksheet(
-                title=CONVERSATION_LOG_TAB,
-                rows=1000,
-                cols=len(CONVERSATION_LOG_HEADERS),
-            )
-            tab.update(
-                values=[CONVERSATION_LOG_HEADERS],
-                range_name=f"A1:{chr(64 + len(CONVERSATION_LOG_HEADERS))}1",
-            )
-            log.info("Created Conversation Log tab with headers")
+            tab = spreadsheet.add_worksheet(title=name, rows=1000, cols=len(headers))
+            tab.update(values=[headers], range_name=f"A1:{chr(64 + len(headers))}1")
+            log.info("Created %s tab with headers", name)
             return tab
         except Exception as exc:
-            log.exception("Failed to create Conversation Log tab: %s", exc)
+            log.exception("Failed to create %s tab: %s", name, exc)
             return None
     except Exception as exc:
-        log.exception("Failed to access Conversation Log tab: %s", exc)
+        log.exception("Failed to access %s tab: %s", name, exc)
         return None
 
 
+# ===========================================================================
+# Conversation Log + history
+# ===========================================================================
+
 def get_conversation_history(from_number: str, to_number: str) -> list[dict]:
-    tab = _ensure_conversation_log_tab()
+    tab = _ensure_tab(CONVERSATION_LOG_TAB, CONVERSATION_LOG_HEADERS)
     if tab is None:
         return []
 
@@ -229,10 +233,7 @@ def log_conversation(
     reply: str,
     is_urgent: bool,
 ) -> None:
-    """Append a turn to the Conversation Log. Best-effort. Uses RAW input so
-    Sheets does not reformat timestamps or strip leading + on phone numbers.
-    """
-    tab = _ensure_conversation_log_tab()
+    tab = _ensure_tab(CONVERSATION_LOG_TAB, CONVERSATION_LOG_HEADERS)
     if tab is None:
         log.error("Cannot log conversation: tab unavailable")
         return
@@ -244,46 +245,201 @@ def log_conversation(
              "TRUE" if is_urgent else "FALSE"],
             value_input_option="RAW",
         )
-        log.info("Conversation logged (urgent=%s)", is_urgent)
+        log.info("Conversation logged (urgent=%s, reply_blank=%s)",
+                 is_urgent, not reply)
     except Exception as exc:
         log.exception("Failed to append to Conversation Log: %s", exc)
 
 
 # ===========================================================================
-# Owner escalation
+# Mutes
 # ===========================================================================
 
-def send_owner_alert(
-    tradie: dict,
-    customer_number: str,
-    customer_message: str,
-    joe_reply: str,
-) -> None:
+def is_muted(business_name: str, customer_number: str) -> bool:
+    """Return True if there is an unexpired mute for this tradie+customer."""
+    tab = _ensure_tab(MUTES_TAB, MUTES_HEADERS)
+    if tab is None:
+        return False
+
+    try:
+        rows = tab.get_all_records()
+    except Exception as exc:
+        log.exception("Failed to read Mutes: %s", exc)
+        return False
+
+    target_customer = _normalise_phone(customer_number)
+    now = datetime.now(timezone.utc)
+
+    for row in rows:
+        if str(row.get("business_name", "")).strip() != business_name:
+            continue
+        if _normalise_phone(row.get("customer_number", "")) != target_customer:
+            continue
+        try:
+            expires = datetime.fromisoformat(str(row.get("expires_at", "")).strip())
+        except (ValueError, TypeError):
+            continue
+        if expires > now:
+            return True
+
+    return False
+
+
+def add_mute(business_name: str, customer_number: str) -> Optional[datetime]:
+    """Add a mute row valid for MUTE_HOURS hours. Returns expiry datetime."""
+    tab = _ensure_tab(MUTES_TAB, MUTES_HEADERS)
+    if tab is None:
+        return None
+
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(hours=MUTE_HOURS)
+    try:
+        tab.append_row(
+            [now.isoformat(timespec="seconds"),
+             business_name,
+             customer_number,
+             expires.isoformat(timespec="seconds")],
+            value_input_option="RAW",
+        )
+        log.info("Mute added: %s for %s until %s", business_name, customer_number, expires)
+        return expires
+    except Exception as exc:
+        log.exception("Failed to add mute: %s", exc)
+        return None
+
+
+def expire_mutes(business_name: str, customer_number: str) -> int:
+    """Force any active mutes for this customer to expire now. Returns count."""
+    tab = _ensure_tab(MUTES_TAB, MUTES_HEADERS)
+    if tab is None:
+        return 0
+
+    try:
+        rows = tab.get_all_values()
+    except Exception as exc:
+        log.exception("Failed to read Mutes for expiry: %s", exc)
+        return 0
+
+    if not rows or len(rows) < 2:
+        return 0
+
+    target_customer = _normalise_phone(customer_number)
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat(timespec="seconds")
+    count = 0
+
+    # Header row is row 1; data starts at row 2. Columns: A timestamp B business_name
+    # C customer_number D expires_at.
+    for idx, row in enumerate(rows[1:], start=2):
+        if len(row) < 4:
+            continue
+        if str(row[1]).strip() != business_name:
+            continue
+        if _normalise_phone(row[2]) != target_customer:
+            continue
+        try:
+            expires = datetime.fromisoformat(str(row[3]).strip())
+        except (ValueError, TypeError):
+            continue
+        if expires <= now:
+            continue
+        # Update column D (expires_at) to now
+        try:
+            tab.update_cell(idx, 4, now_iso)
+            count += 1
+        except Exception as exc:
+            log.exception("Failed to expire mute on row %d: %s", idx, exc)
+
+    log.info("Expired %d active mute(s) for %s/%s", count, business_name, target_customer)
+    return count
+
+
+# ===========================================================================
+# Tradie SMS commands (MUTE / UNMUTE)
+# ===========================================================================
+
+MUTE_HELP = (
+    "Commands:\n"
+    "MUTE +614xxxxxxxx — silence Joe for that customer for 24h\n"
+    "UNMUTE +614xxxxxxxx — re-enable Joe immediately"
+)
+
+
+def handle_tradie_command(tradie: dict, command_body: str) -> str:
+    """Parse a MUTE/UNMUTE command from the tradie. Returns the confirmation
+    text to send back to the tradie (never empty)."""
+    business = tradie.get("business_name") or "the business"
+    parts = command_body.strip().split(maxsplit=1)
+    if not parts:
+        return MUTE_HELP
+
+    verb = parts[0].upper()
+    arg = _normalise_phone(parts[1]) if len(parts) > 1 else ""
+
+    if verb == "MUTE":
+        if not arg:
+            return f"MUTE needs a customer number, e.g. MUTE +61402585413\n\n{MUTE_HELP}"
+        expires = add_mute(business, arg)
+        if expires is None:
+            return f"Sorry, couldn't apply the mute for {arg}. Try again."
+        return (f"Joe muted for {arg} until {expires.isoformat(timespec='minutes')} UTC. "
+                f"Their messages will be forwarded to you. Reply UNMUTE {arg} to re-enable.")
+
+    if verb == "UNMUTE":
+        if not arg:
+            return f"UNMUTE needs a customer number, e.g. UNMUTE +61402585413\n\n{MUTE_HELP}"
+        n = expire_mutes(business, arg)
+        if n == 0:
+            return f"No active mute found for {arg}."
+        return f"Joe re-enabled for {arg}. Auto-replies will resume."
+
+    return MUTE_HELP
+
+
+# ===========================================================================
+# Owner forwarding (urgent + muted-customer messages)
+# ===========================================================================
+
+def send_to_owner(tradie: dict, body: str) -> bool:
+    """Send an SMS from the tradie's Twilio number to their owner_mobile."""
     if twilio_client is None:
-        log.error("Cannot send urgent alert: Twilio client not initialised")
-        return
+        log.error("Cannot SMS owner: Twilio client not initialised")
+        return False
 
     owner = _normalise_phone(tradie.get("owner_mobile", ""))
     twilio_from = _normalise_phone(tradie.get("phone_number", ""))
-    biz = tradie.get("business_name") or "the business"
-
     if not owner or not twilio_from:
-        log.error("Cannot send urgent alert: missing owner_mobile (%r) or phone_number (%r)",
-                  owner, twilio_from)
-        return
+        log.error("Cannot SMS owner: missing owner_mobile or phone_number")
+        return False
 
+    try:
+        twilio_client.messages.create(body=body, from_=twilio_from, to=owner)
+        log.info("Owner SMS sent to %s", owner)
+        return True
+    except Exception as exc:
+        log.exception("Failed to send owner SMS: %s", exc)
+        return False
+
+
+def send_urgent_alert(tradie: dict, customer_number: str, customer_message: str, joe_reply: str) -> None:
+    biz = tradie.get("business_name") or "the business"
     body = (
         f"URGENT — {biz}\n"
         f"Customer: {customer_number}\n"
         f"Said: {customer_message}\n"
         f"Joe replied: {joe_reply}"
     )
+    send_to_owner(tradie, body)
 
-    try:
-        twilio_client.messages.create(body=body, from_=twilio_from, to=owner)
-        log.info("Urgent alert sent to owner %s", owner)
-    except Exception as exc:
-        log.exception("Failed to send urgent alert: %s", exc)
+
+def send_muted_forward(tradie: dict, customer_number: str, customer_message: str) -> None:
+    biz = tradie.get("business_name") or "the business"
+    body = (
+        f"[Muted — {biz}]\n"
+        f"From: {customer_number}\n"
+        f"{customer_message}"
+    )
+    send_to_owner(tradie, body)
 
 
 # ===========================================================================
@@ -355,7 +511,7 @@ def generate_reply(tradie: dict, user_message: str, history: list[dict]) -> str:
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Tradie Receptionist v0.6.1 - alive (Layers 5+6, history fix)"
+    return "Tradie Receptionist v0.7 - alive (mute/unmute + forward)"
 
 
 @app.route("/test", methods=["GET"])
@@ -380,12 +536,26 @@ def test_prompt() -> Response:
     return Response(_build_system_prompt(tradie), mimetype="text/plain")
 
 
+def _twiml_message(text: str) -> Response:
+    twiml = (
+        f"<?xml version='1.0' encoding='UTF-8'?>"
+        f"<Response><Message>{xml_escape(text)}</Message></Response>"
+    )
+    return Response(twiml, mimetype="application/xml")
+
+
+def _twiml_empty() -> Response:
+    """Return an empty TwiML response — no SMS sent to the customer."""
+    twiml = "<?xml version='1.0' encoding='UTF-8'?><Response></Response>"
+    return Response(twiml, mimetype="application/xml")
+
+
 @app.route("/sms", methods=["POST"])
 def sms_webhook() -> Response:
     from_number = request.form.get("From", "")
     to_number = request.form.get("To", "")
     sid = request.form.get("MessageSid", "")
-    body = request.form.get("Body", "")
+    body = request.form.get("Body", "") or ""
     log.info(
         "Inbound SMS | From=%s To=%s Sid=%s Body=%r",
         from_number, to_number, sid, body,
@@ -394,15 +564,30 @@ def sms_webhook() -> Response:
     tradie = find_tradie(to_number)
     if not tradie:
         log.warning("No tradie found in Client tab for To=%s", to_number)
-        twiml = (
-            "<?xml version='1.0' encoding='UTF-8'?>"
-            "<Response><Message>Sorry, this number isn't configured yet.</Message></Response>"
-        )
-        return Response(twiml, mimetype="application/xml")
+        return _twiml_message("Sorry, this number isn't configured yet.")
 
     business = tradie.get("business_name", "your tradie")
     log.info("Tradie matched: %s (%s)", business, to_number)
 
+    # ---- Tradie command path -------------------------------------------
+    sender = _normalise_phone(from_number)
+    owner = _normalise_phone(tradie.get("owner_mobile", ""))
+    body_stripped = body.strip()
+    body_upper = body_stripped.upper()
+    if sender == owner and (body_upper.startswith("MUTE") or body_upper.startswith("UNMUTE")):
+        log.info("Tradie command from owner: %r", body_stripped)
+        confirmation = handle_tradie_command(tradie, body_stripped)
+        return _twiml_message(confirmation)
+
+    # ---- Muted-customer path -------------------------------------------
+    if is_muted(business, from_number):
+        log.info("Customer %s is muted for %s; forwarding only", from_number, business)
+        send_muted_forward(tradie, from_number, body)
+        # Log the inbound with a blank reply so transcripts stay complete
+        log_conversation(business, from_number, to_number, body, "", False)
+        return _twiml_empty()
+
+    # ---- Normal customer path ------------------------------------------
     history = get_conversation_history(from_number, to_number)
     raw_reply = generate_reply(tradie, body, history)
 
@@ -412,10 +597,6 @@ def sms_webhook() -> Response:
     log_conversation(business, from_number, to_number, body, clean_reply, is_urgent)
 
     if is_urgent:
-        send_owner_alert(tradie, from_number, body, clean_reply)
+        send_urgent_alert(tradie, from_number, body, clean_reply)
 
-    twiml = (
-        f"<?xml version='1.0' encoding='UTF-8'?>"
-        f"<Response><Message>{xml_escape(clean_reply)}</Message></Response>"
-    )
-    return Response(twiml, mimetype="application/xml")
+    return _twiml_message(clean_reply)
