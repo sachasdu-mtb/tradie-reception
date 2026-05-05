@@ -36,7 +36,7 @@ ASSISTANT_NAME = "Joe"
 #   Polly.Russell         - Australian male, standard (no neural)
 #   Polly.Nicole          - Australian female, standard
 #   Google.en-AU-Neural2-C - Australian female, Google neural
-VOICE_NAME = "Polly.Olivia-Neural"
+VOICE_NAME = "Google.en-AU-Neural2-C"
 VOICE_LANG = "en-AU"
 
 CONVERSATION_LOG_TAB = "Conversation Log"
