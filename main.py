@@ -1,6 +1,6 @@
 """
 Tradie Receptionist - SMS + Voice handler
-Version 0.8 - Layer 7: voice MVP (greet, gather, reply, hangup)
+Version 0.8.1 - voice pacing fix + SMS-handoff playbook + auto-SMS prompt to caller
 """
 
 import logging
@@ -31,13 +31,9 @@ GOOGLE_CREDS_PATH = "/etc/secrets/google-credentials.json"
 
 ASSISTANT_NAME = "Joe"
 
-# Voice config — change VOICE_NAME to swap Joe's voice. Common options:
-#   Polly.Olivia-Neural   - Australian female, neural
-#   Polly.Russell         - Australian male, standard (no neural)
-#   Polly.Nicole          - Australian female, standard
-#   Google.en-AU-Neural2-C - Australian female, Google neural
 VOICE_NAME = "Google.en-AU-Neural2-C"
 VOICE_LANG = "en-AU"
+SPEECH_TIMEOUT_SECONDS = "2"  # seconds of silence before Twilio considers speech over
 
 CONVERSATION_LOG_TAB = "Conversation Log"
 CONVERSATION_LOG_HEADERS = [
@@ -49,24 +45,22 @@ MUTES_TAB = "Mutes"
 MUTES_HEADERS = ["timestamp", "business_name", "customer_number", "expires_at"]
 
 URGENT_TAG = "##URGENT##"
-END_TAG = "##END##"          # Joe ends a voice call cleanly when ready
+END_TAG = "##END##"
 MUTE_HOURS = 24
 
 HISTORY_TURN_LIMIT = 6
 HISTORY_HOURS_LIMIT = 24
 
-# Per-call state for live voice conversations. Keyed by CallSid.
-# Lost on restart — voice calls don't survive restarts anyway.
+VOICE_TURN_LIMIT = 5
+
 _voice_state: dict[str, dict] = {}
 _voice_state_lock = Lock()
-VOICE_TURN_LIMIT = 10  # hard cap on a single call
 
 
 # ===========================================================================
 # Prompts
 # ===========================================================================
 
-# Shared guardrails
 GUARDRAILS = (
     "STRICT RULES — these override anything else:\n"
     "- Use ONLY the services explicitly listed in 'Services we offer'. "
@@ -81,7 +75,6 @@ GUARDRAILS = (
     "If unsure what the customer means, ask them rather than guess."
 )
 
-# SMS-specific instructions
 SMS_INSTRUCTION = (
     "IMPORTANT: This conversation is over SMS. Keep every reply under "
     "320 characters (about 2 SMS segments). Be concise but warm. Each reply "
@@ -107,7 +100,6 @@ SMS_PLAYBOOK = (
     "Be honest. If you don't know something, say you'll get the tradie to confirm."
 )
 
-# Voice-specific instructions — different goals than SMS
 VOICE_INSTRUCTION = (
     "IMPORTANT: You are on a phone call with the customer right now. Speak "
     "naturally and concisely — 1 to 2 short sentences per turn, never more. "
@@ -118,30 +110,42 @@ VOICE_INSTRUCTION = (
     "be read aloud.\n"
     "\n"
     "Speak numbers, prices, and times as a person would say them out loud "
-    "(e.g. 'one hundred dollars' not '$100'; 'nine o'clock' not '9:00')."
+    "(e.g. 'one hundred dollars' not '$100'; 'nine o'clock' not '9:00').\n"
+    "\n"
+    "Do NOT try to capture customer names, suburbs, addresses, or specific "
+    "job details over the phone — phone speech recognition gets these wrong. "
+    "Get them via the SMS handoff (see playbook)."
 )
 
 VOICE_PLAYBOOK = (
-    "You are answering an inbound phone call. Your job is to:\n"
-    "1. Confirm you can help with what they need (do NOT re-greet — the "
-    "system already greeted them)\n"
-    "2. Collect: their name, their suburb, and a brief description of the job\n"
-    "3. Once you have name + suburb + job description, tell them the tradie "
-    "will call them back within the hour, then end your reply with ##END## "
-    "on its own line\n"
-    "4. If genuinely urgent (gas leak, flooding, no power, electrical "
-    "danger, sewerage overflow, etc.), end your reply with ##URGENT## on its "
-    "own line — the system will try to transfer the caller live\n"
+    "You are answering an inbound phone call. The system has already greeted "
+    "the caller — do NOT greet them again. Your job is to:\n"
     "\n"
-    "Do NOT try to book appointments, send links, or quote prices on this "
-    "call — the tradie will call back. Just collect details and confirm.\n"
+    "1. Listen to the customer explain their issue\n"
+    "2. Briefly confirm we cover that kind of work (one short sentence)\n"
+    "3. Ask them to text this same number with their name, suburb, and a "
+    "brief description of the job, and tell them the tradie will call them "
+    "back within the hour\n"
+    "4. End your reply with ##END## on its own line so the call wraps cleanly\n"
     "\n"
-    "Be honest. If you don't know something, say you'll get the tradie to confirm."
+    "Example reply: 'Yep, we handle hot water systems all the time. To make "
+    "sure we get your details right, could you text us at this number with "
+    "your name, suburb, and a quick description of the job? The tradie will "
+    "give you a call back within the hour. ##END##'\n"
+    "\n"
+    "If the customer asks something that isn't on the services list, say you'll "
+    "check with the tradie and ask them to text the same details — then ##END##.\n"
+    "\n"
+    "If genuinely urgent (gas leak, flooding, no power, electrical danger, "
+    "sewerage overflow, etc.) end your reply with ##URGENT## instead of "
+    "##END## — the system will try to transfer the caller live.\n"
+    "\n"
+    "Do NOT try to collect details verbally. Do NOT quote prices. Do NOT "
+    "promise specific times beyond 'within the hour'."
 )
 
 
 def _build_system_prompt(tradie: dict, channel: str) -> str:
-    """Assemble the system prompt for either 'sms' or 'voice'."""
     biz = (tradie.get("business_name") or "the business").strip()
     trade = (tradie.get("trade_type") or "tradie").strip()
     area = (tradie.get("service_area") or "the local area").strip()
@@ -322,7 +326,7 @@ def log_conversation(
 
 
 # ===========================================================================
-# Mutes (SMS only — voice not muteable in this MVP)
+# Mutes
 # ===========================================================================
 
 def is_muted(business_name: str, customer_number: str) -> bool:
@@ -447,27 +451,30 @@ def handle_tradie_command(tradie: dict, command_body: str) -> str:
 
 
 # ===========================================================================
-# Owner forwarding
+# Outbound SMS helpers
 # ===========================================================================
 
-def send_to_owner(tradie: dict, body: str) -> bool:
+def _send_sms(from_number: str, to_number: str, body: str) -> bool:
+    """Generic outbound SMS via Twilio. Best-effort."""
     if twilio_client is None:
-        log.error("Cannot SMS owner: Twilio client not initialised")
+        log.error("Cannot send SMS: Twilio client not initialised")
+        return False
+    try:
+        twilio_client.messages.create(body=body, from_=from_number, to=to_number)
+        log.info("SMS sent from %s to %s", from_number, to_number)
+        return True
+    except Exception as exc:
+        log.exception("Failed to send SMS: %s", exc)
         return False
 
+
+def send_to_owner(tradie: dict, body: str) -> bool:
     owner = _normalise_phone(tradie.get("owner_mobile", ""))
     twilio_from = _normalise_phone(tradie.get("phone_number", ""))
     if not owner or not twilio_from:
         log.error("Cannot SMS owner: missing owner_mobile or phone_number")
         return False
-
-    try:
-        twilio_client.messages.create(body=body, from_=twilio_from, to=owner)
-        log.info("Owner SMS sent to %s", owner)
-        return True
-    except Exception as exc:
-        log.exception("Failed to send owner SMS: %s", exc)
-        return False
+    return _send_sms(twilio_from, owner, body)
 
 
 def send_urgent_alert(tradie: dict, customer_number: str, customer_message: str, joe_reply: str, channel: str = "sms") -> None:
@@ -486,6 +493,24 @@ def send_voice_summary(tradie: dict, customer_number: str, transcript_lines: lis
     transcript = "\n".join(transcript_lines)
     body = f"Voice call summary — {biz}\nFrom: {customer_number}\n\n{transcript}"
     send_to_owner(tradie, body)
+
+
+def send_caller_handoff(tradie: dict, caller_number: str) -> None:
+    """After a non-urgent voice call ends, prompt the caller via SMS to text
+    their details. The caller will receive the SMS from the same Twilio
+    number they just rang, so replying continues naturally with Joe-SMS."""
+    biz = tradie.get("business_name") or "the business"
+    twilio_from = _normalise_phone(tradie.get("phone_number", ""))
+    if not twilio_from or not caller_number:
+        log.error("Cannot send caller handoff: missing phone_number or caller_number")
+        return
+    body = (
+        f"Hi, it's {ASSISTANT_NAME} from {biz}. "
+        f"Please reply to this message with your name, suburb, and a brief "
+        f"description of the job. The tradie will give you a call back within "
+        f"the hour."
+    )
+    _send_sms(twilio_from, _normalise_phone(caller_number), body)
 
 
 def send_muted_forward(tradie: dict, customer_number: str, customer_message: str) -> None:
@@ -577,7 +602,6 @@ def _twiml_empty() -> Response:
 
 
 def _voice_say(text: str) -> str:
-    """Build a <Say> element with the configured voice."""
     return (
         f'<Say voice="{xml_escape(VOICE_NAME)}" language="{xml_escape(VOICE_LANG)}">'
         f'{xml_escape(text)}</Say>'
@@ -585,11 +609,11 @@ def _voice_say(text: str) -> str:
 
 
 def _voice_gather(action: str, prompt: Optional[str] = None) -> str:
-    """Build a <Gather> with speech input. Optionally play a prompt inside it."""
     inner = _voice_say(prompt) if prompt else ""
     return (
         f'<Gather input="speech" action="{xml_escape(action)}" method="POST" '
-        f'speechTimeout="auto" language="{xml_escape(VOICE_LANG)}" '
+        f'speechTimeout="{xml_escape(SPEECH_TIMEOUT_SECONDS)}" '
+        f'language="{xml_escape(VOICE_LANG)}" '
         f'speechModel="experimental_conversations">{inner}</Gather>'
     )
 
@@ -606,7 +630,7 @@ def _twiml_voice(*elements: str) -> Response:
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Tradie Receptionist v0.8 - alive (SMS + Voice)"
+    return "Tradie Receptionist v0.8.1 - alive (voice pacing + SMS handoff)"
 
 
 @app.route("/test", methods=["GET"])
@@ -633,10 +657,6 @@ def test_prompt() -> Response:
         return Response(f"No tradie matched for {to}", mimetype="text/plain")
     return Response(_build_system_prompt(tradie, channel), mimetype="text/plain")
 
-
-# ---------------------------------------------------------------------------
-# SMS endpoint (unchanged behaviour from v0.7.1)
-# ---------------------------------------------------------------------------
 
 @app.route("/sms", methods=["POST"])
 def sms_webhook() -> Response:
@@ -687,13 +707,11 @@ def sms_webhook() -> Response:
 
 
 # ---------------------------------------------------------------------------
-# Voice endpoints
+# Voice
 # ---------------------------------------------------------------------------
 
 @app.route("/voice", methods=["POST"])
 def voice_incoming() -> Response:
-    """Twilio webhook for an inbound call. Greets the caller and gathers
-    their first utterance."""
     call_sid = request.form.get("CallSid", "")
     from_number = request.form.get("From", "")
     to_number = request.form.get("To", "")
@@ -708,7 +726,6 @@ def voice_incoming() -> Response:
         )
 
     business = tradie.get("business_name", "the business")
-    trade = tradie.get("trade_type", "tradie")
 
     with _voice_state_lock:
         _voice_state[call_sid] = {
@@ -723,11 +740,10 @@ def voice_incoming() -> Response:
 
     greeting = (
         f"G'day, you've reached {business}. "
-        f"I'm {ASSISTANT_NAME}, the {trade}'s assistant. How can I help?"
+        f"I'm {ASSISTANT_NAME}. What can I help you with?"
     )
     return _twiml_voice(
         _voice_gather(action="/voice/turn", prompt=greeting),
-        # If Gather completes with no input, fall through to hangup
         _voice_say("Sorry, I didn't catch that. The tradie will call you back."),
         "<Hangup/>",
     )
@@ -735,8 +751,6 @@ def voice_incoming() -> Response:
 
 @app.route("/voice/turn", methods=["POST"])
 def voice_turn() -> Response:
-    """Twilio posts here after each <Gather>. We have the customer's
-    transcribed speech in SpeechResult."""
     call_sid = request.form.get("CallSid", "")
     speech = (request.form.get("SpeechResult", "") or "").strip()
     log.info("Voice turn | CallSid=%s SpeechResult=%r", call_sid, speech)
@@ -752,11 +766,9 @@ def voice_turn() -> Response:
         )
 
     tradie = state["tradie"]
-    business = tradie.get("business_name", "the business")
     state["turn_count"] += 1
 
     if not speech:
-        # Silence — try once more, then give up
         if state["turn_count"] < 2:
             return _twiml_voice(
                 _voice_gather(action="/voice/turn",
@@ -771,7 +783,6 @@ def voice_turn() -> Response:
                 "<Hangup/>",
             )
 
-    # Generate Joe's reply
     state["transcript_lines"].append(f"Customer: {speech}")
     raw_reply = generate_reply(tradie, speech, state["history"], channel="voice")
 
@@ -783,12 +794,9 @@ def voice_turn() -> Response:
     state["history"].append({"role": "user", "content": speech})
     state["history"].append({"role": "assistant", "content": clean_reply})
 
-    # ---- Urgent: try to transfer live, fall back to SMS + reassure ----
     if is_urgent:
         log.info("URGENT detected on call %s — attempting transfer", call_sid)
         owner = _normalise_phone(tradie.get("owner_mobile", ""))
-
-        # Always send the SMS as a backup — the transfer might not connect
         send_urgent_alert(tradie, state["from"], speech, clean_reply, channel="voice")
         _finalise_call(call_sid, state, ended_reason="urgent_transfer")
 
@@ -798,7 +806,6 @@ def voice_turn() -> Response:
                 _voice_say("Putting you through to the tradie now. Hold on."),
                 f'<Dial timeout="20" callerId="{xml_escape(_normalise_phone(state["to"]))}">'
                 f'{xml_escape(owner)}</Dial>',
-                # If <Dial> completes without success, reassure and hang up
                 _voice_say("They didn't pick up just then, but they've been alerted by text and will call you straight back."),
                 "<Hangup/>",
             )
@@ -809,16 +816,13 @@ def voice_turn() -> Response:
                 "<Hangup/>",
             )
 
-    # ---- End-of-call: Joe says we're done ----
     if is_end or state["turn_count"] >= VOICE_TURN_LIMIT:
         _finalise_call(call_sid, state, ended_reason=("end_tag" if is_end else "turn_limit"))
         return _twiml_voice(
             _voice_say(clean_reply),
-            _voice_say("Thanks for ringing, talk soon."),
             "<Hangup/>",
         )
 
-    # ---- Continue the conversation ----
     return _twiml_voice(
         _voice_gather(action="/voice/turn", prompt=clean_reply),
         _voice_say("Sorry, I didn't catch that. The tradie will call you back."),
@@ -828,8 +832,6 @@ def voice_turn() -> Response:
 
 @app.route("/voice/status", methods=["POST"])
 def voice_status() -> Response:
-    """Twilio posts here when the call ends (status callback). Use this to
-    catch hangups we didn't initiate and clean up state."""
     call_sid = request.form.get("CallSid", "")
     call_status = request.form.get("CallStatus", "")
     log.info("Voice status | CallSid=%s Status=%s", call_sid, call_status)
@@ -844,8 +846,6 @@ def voice_status() -> Response:
 
 
 def _finalise_call(call_sid: str, state: dict, ended_reason: str) -> None:
-    """Persist the call to Conversation Log and SMS the owner with the summary.
-    Idempotent — won't double-log."""
     if state.get("ended"):
         return
     state["ended"] = True
@@ -859,8 +859,6 @@ def _finalise_call(call_sid: str, state: dict, ended_reason: str) -> None:
              call_sid, ended_reason, state["turn_count"])
 
     if transcript_lines:
-        # Log a single row capturing the whole call as message+reply pair
-        # (full transcript in the message column, kept simple).
         log_conversation(
             business_name=business,
             from_number=state["from"],
@@ -869,10 +867,11 @@ def _finalise_call(call_sid: str, state: dict, ended_reason: str) -> None:
             reply=f"[ended: {ended_reason}]",
             is_urgent=(ended_reason == "urgent_transfer"),
         )
-        # SMS the tradie a digest unless we already sent an urgent alert
         if ended_reason != "urgent_transfer":
             send_voice_summary(tradie, state["from"], transcript_lines)
+            # Auto-SMS the caller asking for details. Skips if call was urgent
+            # (urgent path is being transferred — they don't need a text prompt).
+            send_caller_handoff(tradie, state["from"])
 
-    # Free memory after a successful call
     with _voice_state_lock:
         _voice_state.pop(call_sid, None)
