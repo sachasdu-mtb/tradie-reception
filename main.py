@@ -1,13 +1,14 @@
 """
 Tradie Receptionist - SMS + Voice handler
-Version 0.8.1 - voice pacing fix + SMS-handoff playbook + auto-SMS prompt to caller
+Version 0.8.3 - randomised caller handoff delay (60-90s)
 """
 
 import logging
 import os
+import random
 from datetime import datetime, timedelta, timezone
 from html import escape as xml_escape
-from threading import Lock
+from threading import Lock, Timer
 from typing import Optional
 
 import gspread
@@ -52,6 +53,12 @@ HISTORY_TURN_LIMIT = 6
 HISTORY_HOURS_LIMIT = 24
 
 VOICE_TURN_LIMIT = 5
+
+# Random delay before the post-call SMS reaches the caller. A real receptionist
+# wouldn't text you 0.4 seconds after hanging up — randomising avoids the
+# tell-tale "robot ping" cadence. Range is in seconds.
+CALLER_HANDOFF_DELAY_MIN_SECONDS = 60
+CALLER_HANDOFF_DELAY_MAX_SECONDS = 90
 
 _voice_state: dict[str, dict] = {}
 _voice_state_lock = Lock()
@@ -630,7 +637,7 @@ def _twiml_voice(*elements: str) -> Response:
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Tradie Receptionist v0.8.1 - alive (voice pacing + SMS handoff)"
+    return "Tradie Receptionist v0.8.3 - alive (randomised handoff delay)"
 
 
 @app.route("/test", methods=["GET"])
@@ -869,9 +876,23 @@ def _finalise_call(call_sid: str, state: dict, ended_reason: str) -> None:
         )
         if ended_reason != "urgent_transfer":
             send_voice_summary(tradie, state["from"], transcript_lines)
-            # Auto-SMS the caller asking for details. Skips if call was urgent
-            # (urgent path is being transferred — they don't need a text prompt).
-            send_caller_handoff(tradie, state["from"])
+            # Auto-SMS the caller asking for details, but delay it (random
+            # range) so it feels like a real person sent the text — not a bot
+            # firing instantly. Skips if call was urgent (urgent path transfers
+            # live).
+            delay = random.randint(
+                CALLER_HANDOFF_DELAY_MIN_SECONDS,
+                CALLER_HANDOFF_DELAY_MAX_SECONDS,
+            )
+            Timer(
+                delay,
+                send_caller_handoff,
+                args=(tradie, state["from"]),
+            ).start()
+            log.info(
+                "Caller handoff SMS scheduled in %ds for %s",
+                delay, state["from"],
+            )
 
     with _voice_state_lock:
         _voice_state.pop(call_sid, None)
