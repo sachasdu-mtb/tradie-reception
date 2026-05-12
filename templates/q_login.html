@@ -1,0 +1,22 @@
+{% extends "q_base.html" %}
+{% block title %}Sign in — Workbench Quotes{% endblock %}
+{% block content %}
+<div class="wrap">
+  <span class="eyebrow">Workbench Quotes</span>
+  <h1>Sign in</h1>
+  <p class="lede">Enter your mobile — we'll text you a one-tap sign-in link.</p>
+
+  <div class="card">
+    <form method="POST" action="{{ url_for('q_login') }}">
+      <div class="field">
+        <label for="mobile">Mobile number</label>
+        <p class="hint">The mobile you signed up with. Format: +61...</p>
+        <input type="tel" id="mobile" name="mobile" placeholder="+61 400 000 000" required autofocus>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Send sign-in link</button>
+    </form>
+  </div>
+
+  <p class="fine">First time here? Talk to your Workbench rep — your account needs to be created before you can sign in.</p>
+</div>
+{% endblock %}

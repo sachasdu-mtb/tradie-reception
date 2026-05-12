@@ -1,0 +1,117 @@
+{% extends "q_base.html" %}
+{% block title %}New quote — Workbench{% endblock %}
+{% block content %}
+<style>
+/* Override base padding for narrower content area */
+.new-wrap { max-width: 680px; margin: 0 auto; padding: 12px 20px 60px; }
+
+.new-wrap h1 {
+  font-size: clamp(28px, 6vw, 36px);
+  margin: 16px 0 6px;
+}
+.new-wrap .lede { font-size: 16px; margin-bottom: 20px; }
+
+.section-block {
+  background: var(--paper);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.section-block h3 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-block h3::before {
+  content: "//";
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--orange);
+  font-weight: 500;
+}
+
+.new-wrap .field { margin-bottom: 16px; }
+.new-wrap .field:last-child { margin-bottom: 0; }
+.new-wrap label { font-size: 11px; margin-bottom: 6px; }
+.new-wrap .hint { font-size: 13px; margin-top: -4px; margin-bottom: 8px; }
+
+.new-wrap input, .new-wrap textarea {
+  padding: 12px 14px;
+  font-size: 16px; /* prevents iOS zoom on focus */
+  border-radius: 8px;
+}
+.new-wrap textarea { min-height: 140px; line-height: 1.5; }
+
+.new-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 540px) {
+  .new-row { grid-template-columns: 1fr; }
+}
+
+.new-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+.new-actions .btn { width: 100%; }
+@media (min-width: 540px) {
+  .new-actions { flex-direction: row; }
+  .new-actions .btn { width: auto; }
+  .new-actions .btn-primary { flex: 1; }
+}
+</style>
+
+<div class="new-wrap">
+  <a href="{{ url_for('q_dashboard') }}" class="muted" style="font-family:var(--mono);font-size:13px;">← All quotes</a>
+  <span class="eyebrow">New quote</span>
+  <h1>Start a quote</h1>
+  <p class="lede">Tell us about the customer and the job. We'll draft the line items — you review and edit before sending.</p>
+
+  <form method="POST" action="{{ url_for('q_new') }}">
+
+    <div class="section-block">
+      <h3>Customer</h3>
+      <div class="field">
+        <label for="customer_name">Name</label>
+        <input type="text" id="customer_name" name="customer_name" required autofocus placeholder="John Smith">
+      </div>
+      <div class="new-row">
+        <div class="field" style="margin-bottom:0;">
+          <label for="customer_phone">Mobile</label>
+          <p class="hint">Where we'll send the quote link</p>
+          <input type="tel" id="customer_phone" name="customer_phone" required placeholder="+61 400 000 000">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label for="customer_email">Email <span style="text-transform:none;color:var(--ink-500);font-weight:400;">(optional)</span></label>
+          <p class="hint">For their records</p>
+          <input type="email" id="customer_email" name="customer_email" placeholder="john@example.com">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <h3>The job</h3>
+      <div class="field" style="margin-bottom:0;">
+        <label for="job_description">What needs doing</label>
+        <p class="hint">Plain English. Materials, labour, anything you already know. The AI uses your pricing list to draft line items.</p>
+        <textarea id="job_description" name="job_description" required placeholder="Replace hot water system at 12 Smith St, Buderim. Customer wants gas, similar capacity to existing (170L). Old unit needs removal and disposal."></textarea>
+      </div>
+    </div>
+
+    <div class="new-actions">
+      <a href="{{ url_for('q_dashboard') }}" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-primary">Draft quote →</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
