@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0D7377">
+<title>Quote from {{ quote.business_name }}</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --teal-900:#0A5A5D; --teal-700:#0D7377; --teal-100:#E0F0F0;
+  --orange:#E8541C; --amber:#F5A623;
+  --cream:#FAF7F0; --paper:#F5F0E6;
+  --ink:#1A1A1A; --ink-700:#3A3A3A; --ink-500:#6B6B6B;
+  --line:#E8E2D4; --line-strong:#C9C2B0;
+  --display:'Bricolage Grotesque',Georgia,serif;
+  --body:'Manrope',system-ui,sans-serif;
+  --mono:'DM Mono',ui-monospace,Menlo,monospace;
+  --green:#1E8449; --red:#C0392B;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--body);font-size:16px;line-height:1.55;color:var(--ink);background:var(--cream);-webkit-font-smoothing:antialiased;}
+.wrap{max-width:680px;margin:0 auto;padding:24px 20px 60px;}
+
+.brand-strip{padding:24px 20px;background:var(--teal-700);color:var(--cream);text-align:center;}
+.brand-strip .biz{font-family:var(--display);font-weight:800;font-size:28px;letter-spacing:-0.02em;}
+.brand-strip .sub{font-family:var(--mono);font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(250,247,240,0.7);margin-top:6px;}
+
+h1{font-family:var(--display);font-weight:800;font-size:32px;line-height:1.05;letter-spacing:-0.03em;margin:32px 0 6px;}
+h2{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:-0.01em;margin:32px 0 12px;}
+.lede{font-size:16px;color:var(--ink-700);margin-bottom:8px;}
+.quote-id{font-family:var(--mono);font-size:12px;color:var(--ink-500);letter-spacing:0.04em;}
+
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:24px;margin-top:20px;}
+.card-paper{background:var(--paper);}
+.card h2{margin-top:0;}
+
+table{width:100%;border-collapse:collapse;}
+th{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-500);text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);}
+td{padding:14px 6px;border-bottom:1px solid var(--line);vertical-align:top;font-size:15px;}
+.num{text-align:right;font-family:var(--mono);}
+tbody tr:last-child td{border-bottom:none;}
+
+.totals{margin-top:20px;border-top:2px solid var(--ink);padding-top:16px;}
+.totals .row{display:flex;justify-content:space-between;padding:6px 0;font-family:var(--mono);}
+.totals .row.total{font-family:var(--display);font-weight:700;font-size:26px;border-top:1px solid var(--line);margin-top:8px;padding-top:14px;color:var(--teal-900);}
+
+.actions{position:sticky;bottom:0;background:linear-gradient(to top, var(--cream) 60%, rgba(250,247,240,0));padding-top:24px;padding-bottom:8px;margin-top:32px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:18px 20px;border-radius:8px;font-family:var(--body);font-weight:700;font-size:16px;text-decoration:none;transition:transform 100ms,background 160ms;min-height:56px;border:2px solid transparent;cursor:pointer;}
+.btn:active{transform:translateY(1px);}
+.btn-accept{background:var(--teal-700);color:var(--cream);border-color:var(--teal-700);}
+.btn-accept:hover{background:var(--teal-900);}
+.btn-decline{background:#fff;color:var(--ink-700);border-color:var(--line-strong);}
+.btn-decline:hover{background:var(--paper);}
+
+.status-banner{padding:18px;border-radius:8px;font-weight:600;text-align:center;margin-top:24px;}
+.status-banner.accepted{background:#DFF2E1;color:var(--green);}
+.status-banner.declined{background:#F4D8D5;color:var(--red);}
+
+.fine{font-family:var(--mono);font-size:12px;color:var(--ink-500);margin-top:32px;text-align:center;}
+.fine a{color:var(--teal-700);text-decoration:none;}
+</style>
+</head>
+<body>
+
+<div class="brand-strip">
+  <div class="biz">{{ quote.business_name }}</div>
+  <div class="sub">// Quote prepared via Workbench</div>
+</div>
+
+<main class="wrap">
+  <h1>Quote for {{ quote.customer_name }}</h1>
+  <p class="lede">Prepared {{ quote.sent_at[:10] if quote.sent_at else quote.created_at[:10] }}</p>
+  <p class="quote-id">Reference: {{ quote.quote_id[:8].upper() }}</p>
+
+  <div class="card">
+    <h2>The job</h2>
+    <p>{{ quote.job_description }}</p>
+  </div>
+
+  <div class="card">
+    <h2>Line items</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="num">Qty</th>
+          <th class="num">Unit price</th>
+          <th class="num">Line total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td class="num">{{ '%.1f' % item.quantity }}{% if item.unit %} {{ item.unit }}{% endif %}</td>
+          <td class="num">${{ '%.2f' % item.unit_price }}</td>
+          <td class="num">${{ '%.2f' % item.line_total }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <div class="row"><span>Subtotal</span><span>${{ '%.2f' % quote.subtotal }}</span></div>
+      <div class="row"><span>GST (10%)</span><span>${{ '%.2f' % quote.gst }}</span></div>
+      <div class="row total"><span>Total</span><span>${{ '%.2f' % quote.total }}</span></div>
+    </div>
+  </div>
+
+  {% if quote.tradie_terms %}
+  <div class="card card-paper">
+    <h2>Terms</h2>
+    <p style="white-space:pre-wrap;">{{ quote.tradie_terms }}</p>
+  </div>
+  {% endif %}
+
+  {% if quote.status in ('sent', 'viewed') %}
+    <div class="actions">
+      <form method="POST" action="{{ url_for('customer_decline', quote_id=quote.quote_id) }}" style="display:contents;">
+        <button type="submit" class="btn btn-decline">Decline</button>
+      </form>
+      <form method="POST" action="{{ url_for('customer_accept', quote_id=quote.quote_id) }}" style="display:contents;">
+        <button type="submit" class="btn btn-accept">Accept this quote</button>
+      </form>
+    </div>
+    <p class="fine">By accepting, you agree to the terms above. The tradie will be notified immediately.</p>
+  {% elif quote.status == 'accepted' %}
+    <div class="status-banner accepted">✓ You accepted this quote on {{ quote.responded_at[:10] }}. The tradie has been notified.</div>
+  {% elif quote.status == 'declined' %}
+    <div class="status-banner declined">This quote was declined on {{ quote.responded_at[:10] }}.</div>
+  {% endif %}
+
+  <p class="fine">Prepared via <a href="https://workbenchhq.org" target="_blank">Workbench</a></p>
+</main>
+
+</body>
+</html>
