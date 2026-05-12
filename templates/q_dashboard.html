@@ -1,0 +1,34 @@
+{% extends "q_base.html" %}
+{% block title %}Quotes — Workbench{% endblock %}
+{% block content %}
+<div class="wrap">
+  <span class="eyebrow">// Workbench Quotes</span>
+  <h1>Your quotes</h1>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:24px;">
+    <p class="muted" style="margin:0;">{{ quotes|length }} quote{{ '' if quotes|length == 1 else 's' }}</p>
+    <a href="{{ url_for('q_new') }}" class="btn btn-orange">+ New quote</a>
+  </div>
+
+  {% if quotes %}
+    <div class="quote-list">
+      {% for q in quotes %}
+        <a href="{{ url_for('q_review', quote_id=q.quote_id) }}" class="quote-row">
+          <div class="who">
+            <strong>{{ q.customer_name or '(no name yet)' }}</strong>
+            <div class="sub">{{ q.job_description[:80] }}{% if q.job_description|length > 80 %}…{% endif %}</div>
+          </div>
+          <div class="amount">${{ '%.2f' % q.total }}</div>
+          <span class="pill pill-{{ q.status }}">{{ q.status }}</span>
+          <div class="meta">{{ q.created_at[:10] }}</div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty">
+      <h3>No quotes yet</h3>
+      <p>Click <strong>+ New quote</strong> to start your first one. Describe the job in plain English, we'll draft line items for you to edit, then send the customer a link.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
