@@ -1,6 +1,6 @@
 """
 Tradie Receptionist + Quotes - SMS + Voice + Quote portal
-Version 1.0.0 - Workbench Quotes MVP added
+Version 1.0.1 - magic-link tolerates SMS prefetch
 """
 
 import json
@@ -679,7 +679,7 @@ def _twiml_voice(*elements: str) -> Response:
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Workbench v1.0.0 - alive (Reception + Quotes MVP)"
+    return "Workbench v1.0.1 - alive (Reception + Quotes MVP)"
 
 
 @app.route("/test", methods=["GET"])
@@ -1225,7 +1225,10 @@ def session_create(tradie_phone: str) -> Optional[str]:
 
 
 def session_redeem(token: str) -> Optional[str]:
-    """Validate a magic-link token. Returns tradie_phone on success, marks token used."""
+    """Validate a magic-link token. Returns tradie_phone on success.
+    Tolerates multiple redemptions within the validity window — SMS apps
+    and carriers commonly prefetch URLs for previews, which would otherwise
+    consume the token before the user's actual click."""
     tab = _sessions_tab()
     if tab is None:
         return None
@@ -1238,23 +1241,23 @@ def session_redeem(token: str) -> Optional[str]:
     for i, row in enumerate(rows, start=2):
         if str(row.get("token", "")).strip() != token:
             continue
-        if str(row.get("status", "")).strip() != "pending":
-            log.info("session_redeem: token already used or expired")
-            return None
         try:
             expires = datetime.fromisoformat(str(row.get("expires_at", "")).strip())
         except (ValueError, TypeError):
+            log.info("session_redeem: bad expires_at: %r", row.get("expires_at"))
             return None
         if expires < now:
             log.info("session_redeem: token expired")
             return None
-        # Mark as used.
-        try:
-            status_col = SESSIONS_HEADERS.index("status") + 1
-            tab.update_cell(i, status_col, "used")
-        except Exception as exc:
-            log.exception("session_redeem update failed: %s", exc)
+        # Mark as used (idempotent — re-clicks are fine).
+        if str(row.get("status", "")).strip() == "pending":
+            try:
+                status_col = SESSIONS_HEADERS.index("status") + 1
+                tab.update_cell(i, status_col, "used")
+            except Exception as exc:
+                log.exception("session_redeem status update failed: %s", exc)
         return _normalise_phone(row.get("tradie_phone", ""))
+    log.info("session_redeem: token not found")
     return None
 
 
@@ -1619,3 +1622,4 @@ def customer_decline(quote_id):
     if tradie:
         notify_tradie_of_response(tradie, quote, accepted=False)
     return redirect(url_for("customer_view", quote_id=quote_id))
+
