@@ -1,19 +1,26 @@
 """
-Tradie Receptionist - SMS + Voice handler
-Version 0.8.3 - randomised caller handoff delay (60-90s)
+Tradie Receptionist + Quotes - SMS + Voice + Quote portal
+Version 1.0.0 - Workbench Quotes MVP added
 """
 
+import json
 import logging
 import os
 import random
+import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 from html import escape as xml_escape
 from threading import Lock, Timer
 from typing import Optional
 
 import gspread
 from anthropic import Anthropic
-from flask import Flask, request, Response
+from flask import (
+    Flask, request, Response, render_template, redirect, url_for,
+    session, flash, abort,
+)
 from google.oauth2.service_account import Credentials
 from twilio.rest import Client as TwilioClient
 
@@ -21,9 +28,11 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
-log = logging.getLogger("receptionist")
+log = logging.getLogger("workbench")
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
+app.permanent_session_lifetime = timedelta(days=30)
 
 SHEET_ID = os.environ["GOOGLE_SHEET_ID"]
 TWILIO_ACCOUNT_SID = os.environ["TWILIO_ACCOUNT_SID"]
@@ -59,6 +68,39 @@ VOICE_TURN_LIMIT = 5
 # tell-tale "robot ping" cadence. Range is in seconds.
 CALLER_HANDOFF_DELAY_MIN_SECONDS = 60
 CALLER_HANDOFF_DELAY_MAX_SECONDS = 90
+
+# ============================================================================
+# Quotes — Workbench Quotes MVP
+# ============================================================================
+
+QUOTES_TAB = "Quotes"
+QUOTES_HEADERS = [
+    "quote_id", "tradie_phone", "business_name",
+    "customer_name", "customer_phone", "customer_email",
+    "job_description",
+    "subtotal", "gst", "total",
+    "status",  # draft / sent / viewed / accepted / declined
+    "created_at", "sent_at", "viewed_at", "responded_at",
+    "tradie_terms", "notes",
+]
+
+QUOTE_ITEMS_TAB = "QuoteItems"
+QUOTE_ITEMS_HEADERS = [
+    "item_id", "quote_id", "line_order",
+    "description", "quantity", "unit", "unit_price", "line_total",
+]
+
+SESSIONS_TAB = "QuoteSessions"
+SESSIONS_HEADERS = [
+    "token", "tradie_phone", "created_at", "expires_at", "status",
+]
+
+GST_RATE = 0.10
+SESSION_PENDING_HOURS = 1   # how long the magic link is valid
+SESSION_ACTIVE_DAYS = 30    # how long after redemption the session stays signed in
+PUBLIC_BASE_URL = os.environ.get(
+    "PUBLIC_BASE_URL", "https://tradie-reception.onrender.com"
+)
 
 _voice_state: dict[str, dict] = {}
 _voice_state_lock = Lock()
@@ -637,7 +679,7 @@ def _twiml_voice(*elements: str) -> Response:
 
 @app.route("/", methods=["GET"])
 def health() -> str:
-    return "Tradie Receptionist v0.8.3 - alive (randomised handoff delay)"
+    return "Workbench v1.0.0 - alive (Reception + Quotes MVP)"
 
 
 @app.route("/test", methods=["GET"])
@@ -896,3 +938,684 @@ def _finalise_call(call_sid: str, state: dict, ended_reason: str) -> None:
 
     with _voice_state_lock:
         _voice_state.pop(call_sid, None)
+
+
+# ============================================================================
+# ============================================================================
+#  WORKBENCH QUOTES
+# ============================================================================
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Sheet helpers — Quotes tabs
+# ----------------------------------------------------------------------------
+
+def _quotes_tab():
+    return _ensure_tab(QUOTES_TAB, QUOTES_HEADERS)
+
+def _items_tab():
+    return _ensure_tab(QUOTE_ITEMS_TAB, QUOTE_ITEMS_HEADERS)
+
+def _sessions_tab():
+    return _ensure_tab(SESSIONS_TAB, SESSIONS_HEADERS)
+
+
+def _find_row_index(tab, col_name: str, value: str) -> Optional[int]:
+    """Return 1-indexed row number of first matching row (after header), or None."""
+    if tab is None:
+        return None
+    try:
+        rows = tab.get_all_records()
+        for i, row in enumerate(rows, start=2):
+            if str(row.get(col_name, "")).strip() == value:
+                return i
+    except Exception as exc:
+        log.exception("find_row_index failed: %s", exc)
+    return None
+
+
+def _row_to_dict(headers: list[str], row: list) -> dict:
+    """Pad row to header length, return dict."""
+    padded = list(row) + [""] * (len(headers) - len(row))
+    return dict(zip(headers, padded))
+
+
+# ----------------------------------------------------------------------------
+# Quotes — CRUD
+# ----------------------------------------------------------------------------
+
+def quote_create(
+    tradie: dict,
+    customer_name: str,
+    customer_phone: str,
+    customer_email: str,
+    job_description: str,
+    items: list[dict],
+    tradie_terms: str = "",
+) -> Optional[str]:
+    """Create a new draft quote + its items. Returns quote_id on success."""
+    quotes = _quotes_tab()
+    items_tab = _items_tab()
+    if quotes is None or items_tab is None:
+        log.error("Cannot create quote: tabs unavailable")
+        return None
+
+    quote_id = uuid.uuid4().hex
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    subtotal = sum(float(it.get("quantity", 0)) * float(it.get("unit_price", 0)) for it in items)
+    gst = round(subtotal * GST_RATE, 2)
+    total = round(subtotal + gst, 2)
+    subtotal = round(subtotal, 2)
+
+    quote_row = [
+        quote_id,
+        _normalise_phone(tradie.get("phone_number", "")),
+        tradie.get("business_name", ""),
+        customer_name,
+        _normalise_phone(customer_phone),
+        customer_email,
+        job_description,
+        subtotal, gst, total,
+        "draft",
+        now, "", "", "",
+        tradie_terms,
+        "",
+    ]
+    try:
+        quotes.append_row(quote_row, value_input_option="RAW")
+    except Exception as exc:
+        log.exception("Failed to append quote: %s", exc)
+        return None
+
+    for idx, it in enumerate(items):
+        qty = float(it.get("quantity", 0))
+        price = float(it.get("unit_price", 0))
+        item_row = [
+            uuid.uuid4().hex,
+            quote_id,
+            idx,
+            it.get("description", ""),
+            qty,
+            it.get("unit", ""),
+            price,
+            round(qty * price, 2),
+        ]
+        try:
+            items_tab.append_row(item_row, value_input_option="RAW")
+        except Exception as exc:
+            log.exception("Failed to append quote item: %s", exc)
+
+    log.info("Quote created: %s for tradie %s, total $%.2f",
+             quote_id, tradie.get("business_name"), total)
+    return quote_id
+
+
+def quote_get(quote_id: str) -> Optional[dict]:
+    tab = _quotes_tab()
+    if tab is None:
+        return None
+    try:
+        rows = tab.get_all_records()
+        for row in rows:
+            if str(row.get("quote_id", "")).strip() == quote_id:
+                for k in ("subtotal", "gst", "total"):
+                    try:
+                        row[k] = float(row.get(k, 0) or 0)
+                    except (TypeError, ValueError):
+                        row[k] = 0.0
+                return row
+    except Exception as exc:
+        log.exception("quote_get failed: %s", exc)
+    return None
+
+
+def quote_items(quote_id: str) -> list[dict]:
+    tab = _items_tab()
+    if tab is None:
+        return []
+    try:
+        rows = tab.get_all_records()
+    except Exception as exc:
+        log.exception("quote_items read failed: %s", exc)
+        return []
+    matched = []
+    for row in rows:
+        if str(row.get("quote_id", "")).strip() != quote_id:
+            continue
+        for k in ("quantity", "unit_price", "line_total"):
+            try:
+                row[k] = float(row.get(k, 0) or 0)
+            except (TypeError, ValueError):
+                row[k] = 0.0
+        try:
+            row["line_order"] = int(row.get("line_order", 0) or 0)
+        except (TypeError, ValueError):
+            row["line_order"] = 0
+        matched.append(row)
+    matched.sort(key=lambda r: r.get("line_order", 0))
+    return matched
+
+
+def quote_list_for_tradie(tradie_phone: str) -> list[dict]:
+    tab = _quotes_tab()
+    if tab is None:
+        return []
+    try:
+        rows = tab.get_all_records()
+    except Exception as exc:
+        log.exception("quote_list_for_tradie failed: %s", exc)
+        return []
+    target = _normalise_phone(tradie_phone)
+    out = []
+    for row in rows:
+        if _normalise_phone(row.get("tradie_phone", "")) != target:
+            continue
+        for k in ("subtotal", "gst", "total"):
+            try:
+                row[k] = float(row.get(k, 0) or 0)
+            except (TypeError, ValueError):
+                row[k] = 0.0
+        out.append(row)
+    out.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    return out
+
+
+def quote_update_status(quote_id: str, status: str, timestamp_field: Optional[str] = None) -> bool:
+    """Update status; optionally also stamp a timestamp field (sent_at / viewed_at / responded_at)."""
+    tab = _quotes_tab()
+    if tab is None:
+        return False
+    row_idx = _find_row_index(tab, "quote_id", quote_id)
+    if row_idx is None:
+        log.warning("quote_update_status: quote_id %s not found", quote_id)
+        return False
+    try:
+        status_col = QUOTES_HEADERS.index("status") + 1
+        tab.update_cell(row_idx, status_col, status)
+        if timestamp_field and timestamp_field in QUOTES_HEADERS:
+            ts_col = QUOTES_HEADERS.index(timestamp_field) + 1
+            tab.update_cell(row_idx, ts_col, datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        log.info("Quote %s -> %s", quote_id, status)
+        return True
+    except Exception as exc:
+        log.exception("quote_update_status failed: %s", exc)
+        return False
+
+
+def quote_replace_items(quote_id: str, items: list[dict]) -> bool:
+    """Wipe and replace items for a quote. Used when tradie saves edits."""
+    tab = _items_tab()
+    if tab is None:
+        return False
+    try:
+        # Find all matching item rows and delete them (in reverse to keep indices stable).
+        all_rows = tab.get_all_records()
+        to_delete = [i + 2 for i, r in enumerate(all_rows)
+                     if str(r.get("quote_id", "")).strip() == quote_id]
+        for row_idx in sorted(to_delete, reverse=True):
+            tab.delete_rows(row_idx)
+        # Re-append.
+        new_subtotal = 0.0
+        for idx, it in enumerate(items):
+            qty = float(it.get("quantity", 0))
+            price = float(it.get("unit_price", 0))
+            line_total = round(qty * price, 2)
+            new_subtotal += line_total
+            tab.append_row([
+                uuid.uuid4().hex, quote_id, idx,
+                it.get("description", ""), qty, it.get("unit", ""), price, line_total,
+            ], value_input_option="RAW")
+        # Update parent quote totals.
+        quotes = _quotes_tab()
+        row_idx = _find_row_index(quotes, "quote_id", quote_id)
+        if row_idx:
+            gst = round(new_subtotal * GST_RATE, 2)
+            total = round(new_subtotal + gst, 2)
+            subtotal_col = QUOTES_HEADERS.index("subtotal") + 1
+            gst_col = QUOTES_HEADERS.index("gst") + 1
+            total_col = QUOTES_HEADERS.index("total") + 1
+            quotes.update_cell(row_idx, subtotal_col, round(new_subtotal, 2))
+            quotes.update_cell(row_idx, gst_col, gst)
+            quotes.update_cell(row_idx, total_col, total)
+        return True
+    except Exception as exc:
+        log.exception("quote_replace_items failed: %s", exc)
+        return False
+
+
+def quote_update_terms(quote_id: str, terms: str) -> bool:
+    tab = _quotes_tab()
+    if tab is None:
+        return False
+    row_idx = _find_row_index(tab, "quote_id", quote_id)
+    if row_idx is None:
+        return False
+    try:
+        col = QUOTES_HEADERS.index("tradie_terms") + 1
+        tab.update_cell(row_idx, col, terms)
+        return True
+    except Exception as exc:
+        log.exception("quote_update_terms failed: %s", exc)
+        return False
+
+
+# ----------------------------------------------------------------------------
+# Auth — magic link via SMS
+# ----------------------------------------------------------------------------
+
+def session_create(tradie_phone: str) -> Optional[str]:
+    tab = _sessions_tab()
+    if tab is None:
+        return None
+    token = secrets.token_urlsafe(24)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(hours=SESSION_PENDING_HOURS)
+    try:
+        tab.append_row([
+            token, _normalise_phone(tradie_phone),
+            now.isoformat(timespec="seconds"),
+            expires.isoformat(timespec="seconds"),
+            "pending",
+        ], value_input_option="RAW")
+        return token
+    except Exception as exc:
+        log.exception("session_create failed: %s", exc)
+        return None
+
+
+def session_redeem(token: str) -> Optional[str]:
+    """Validate a magic-link token. Returns tradie_phone on success, marks token used."""
+    tab = _sessions_tab()
+    if tab is None:
+        return None
+    try:
+        rows = tab.get_all_records()
+    except Exception as exc:
+        log.exception("session_redeem read failed: %s", exc)
+        return None
+    now = datetime.now(timezone.utc)
+    for i, row in enumerate(rows, start=2):
+        if str(row.get("token", "")).strip() != token:
+            continue
+        if str(row.get("status", "")).strip() != "pending":
+            log.info("session_redeem: token already used or expired")
+            return None
+        try:
+            expires = datetime.fromisoformat(str(row.get("expires_at", "")).strip())
+        except (ValueError, TypeError):
+            return None
+        if expires < now:
+            log.info("session_redeem: token expired")
+            return None
+        # Mark as used.
+        try:
+            status_col = SESSIONS_HEADERS.index("status") + 1
+            tab.update_cell(i, status_col, "used")
+        except Exception as exc:
+            log.exception("session_redeem update failed: %s", exc)
+        return _normalise_phone(row.get("tradie_phone", ""))
+    return None
+
+
+def require_login(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("tradie_phone"):
+            return redirect(url_for("q_login"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@app.context_processor
+def inject_user():
+    """Make 'user' available in all templates if signed in."""
+    phone = session.get("tradie_phone")
+    if not phone:
+        return {"user": None}
+    tradie = find_tradie(phone)
+    if not tradie:
+        return {"user": None}
+    return {"user": {"phone": phone, "business_name": tradie.get("business_name", "")}}
+
+
+# ----------------------------------------------------------------------------
+# LLM — draft line items from tradie description
+# ----------------------------------------------------------------------------
+
+QUOTE_DRAFTER_PROMPT = (
+    "You are a quote-drafting assistant for an Australian trades business. "
+    "Given a job description and the tradie's services/pricing notes, you draft "
+    "a list of line items for a customer quote. RULES:\n"
+    "- ONLY include items that are reasonable for the described job.\n"
+    "- ONLY use pricing that's grounded in the tradie's pricing notes. If a "
+    "specific price isn't given, use a sensible estimate based on the notes "
+    "(e.g., if hourly rate is $145, multiply by hours for labour lines).\n"
+    "- ALWAYS include labour and any obvious materials.\n"
+    "- Quantities should be realistic (e.g., 2.5 hours, not 'a few hours').\n"
+    "- Units: 'hour', 'each', 'm', 'kg', or leave blank for whole items.\n"
+    "- Descriptions should be specific and customer-friendly. No jargon.\n"
+    "- Output JSON only, no commentary."
+)
+
+
+def draft_quote_items(tradie: dict, job_description: str) -> list[dict]:
+    """Use Claude to draft line items. Returns a list of dicts with
+    description / quantity / unit / unit_price."""
+    if anthropic_client is None:
+        log.error("No Anthropic client for quote drafting; returning empty draft")
+        return []
+
+    context_parts = []
+    for label, key in [
+        ("Trade", "trade_type"),
+        ("Services we offer", "services_offered"),
+        ("What we don't do", "does_not_service"),
+        ("Callout fee", "callout_fee"),
+        ("Pricing notes", "pricing_notes"),
+    ]:
+        val = tradie.get(key)
+        if val and str(val).strip():
+            context_parts.append(f"{label}: {val}")
+    context = "\n".join(context_parts)
+
+    user_msg = (
+        f"Tradie context:\n{context}\n\n"
+        f"Job description:\n{job_description}\n\n"
+        f"Draft line items as a JSON array. Each item: "
+        f'{{\"description\": str, \"quantity\": number, \"unit\": str, \"unit_price\": number}}. '
+        f"Use AUD ex-GST prices (GST is added separately). Return ONLY the JSON array, no other text."
+    )
+
+    try:
+        resp = anthropic_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1500,
+            system=QUOTE_DRAFTER_PROMPT,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+        # Tolerate the model wrapping JSON in ```json fences.
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        items = json.loads(text)
+        cleaned = []
+        for it in items:
+            try:
+                cleaned.append({
+                    "description": str(it.get("description", "")).strip(),
+                    "quantity": float(it.get("quantity", 0)),
+                    "unit": str(it.get("unit", "")).strip(),
+                    "unit_price": float(it.get("unit_price", 0)),
+                })
+            except (TypeError, ValueError):
+                continue
+        log.info("Drafted %d line items for job: %r", len(cleaned), job_description[:60])
+        return cleaned
+    except Exception as exc:
+        log.exception("draft_quote_items failed: %s", exc)
+        return []
+
+
+# ----------------------------------------------------------------------------
+# Outbound SMS — quote-related
+# ----------------------------------------------------------------------------
+
+def send_magic_link_sms(tradie: dict, token: str) -> bool:
+    """SMS the tradie a one-tap sign-in link from their own Twilio number."""
+    twilio_from = _normalise_phone(tradie.get("phone_number", ""))
+    owner = _normalise_phone(tradie.get("owner_mobile", ""))
+    if not twilio_from or not owner:
+        return False
+    link = f"{PUBLIC_BASE_URL}/q/auth/{token}"
+    body = (
+        f"Workbench sign-in link (valid 1 hour):\n{link}\n\n"
+        f"If you didn't request this, ignore this message."
+    )
+    return _send_sms(twilio_from, owner, body)
+
+
+def send_quote_to_customer(tradie: dict, quote: dict) -> bool:
+    """SMS the customer the link to view + accept the quote."""
+    twilio_from = _normalise_phone(tradie.get("phone_number", ""))
+    to = _normalise_phone(quote.get("customer_phone", ""))
+    if not twilio_from or not to:
+        return False
+    link = f"{PUBLIC_BASE_URL}/quote/{quote['quote_id']}"
+    biz = tradie.get("business_name", "your tradie")
+    body = (
+        f"Hi {quote.get('customer_name', '').split()[0] if quote.get('customer_name') else ''}, "
+        f"your quote from {biz} is ready: {link}\n\n"
+        f"Reply to this message if you have any questions."
+    )
+    return _send_sms(twilio_from, to, body)
+
+
+def notify_tradie_of_response(tradie: dict, quote: dict, accepted: bool) -> bool:
+    """SMS the tradie when a customer accepts or declines."""
+    twilio_from = _normalise_phone(tradie.get("phone_number", ""))
+    owner = _normalise_phone(tradie.get("owner_mobile", ""))
+    if not twilio_from or not owner:
+        return False
+    verb = "ACCEPTED" if accepted else "declined"
+    body = (
+        f"Quote {verb}: {quote.get('customer_name', 'customer')} "
+        f"({quote.get('customer_phone', '')}) "
+        f"— ${quote.get('total', 0):.2f}.\n"
+        f"Ref: {quote['quote_id'][:8].upper()}"
+    )
+    return _send_sms(twilio_from, owner, body)
+
+
+# ----------------------------------------------------------------------------
+# Routes — tradie portal
+# ----------------------------------------------------------------------------
+
+@app.route("/q", methods=["GET"])
+def q_root():
+    if session.get("tradie_phone"):
+        return redirect(url_for("q_dashboard"))
+    return redirect(url_for("q_login"))
+
+
+@app.route("/q/login", methods=["GET", "POST"])
+def q_login():
+    if request.method == "POST":
+        mobile = _normalise_phone(request.form.get("mobile", ""))
+        if not mobile:
+            flash("Enter a valid mobile number.", "error")
+            return redirect(url_for("q_login"))
+        # Find tradie by owner_mobile (since they may not know their Twilio number).
+        # We look up by either phone_number OR owner_mobile.
+        tradie = None
+        if spreadsheet is not None:
+            try:
+                rows = spreadsheet.worksheet("Client").get_all_records()
+                for row in rows:
+                    if (_normalise_phone(row.get("owner_mobile", "")) == mobile
+                            or _normalise_phone(row.get("phone_number", "")) == mobile):
+                        if str(row.get("active", "")).strip().upper() == "TRUE":
+                            tradie = row
+                            break
+            except Exception as exc:
+                log.exception("q_login lookup failed: %s", exc)
+        if not tradie:
+            # Generic message — don't confirm or deny existence.
+            flash("If that mobile is registered, a sign-in link is on its way.", "info")
+            return redirect(url_for("q_login"))
+        token = session_create(tradie.get("phone_number", ""))
+        if not token:
+            flash("Couldn't create a sign-in link. Try again in a minute.", "error")
+            return redirect(url_for("q_login"))
+        sent = send_magic_link_sms(tradie, token)
+        if not sent:
+            flash("Couldn't send the sign-in SMS. Contact support.", "error")
+            return redirect(url_for("q_login"))
+        flash("If that mobile is registered, a sign-in link is on its way.", "info")
+        return redirect(url_for("q_login"))
+    return render_template("q_login.html")
+
+
+@app.route("/q/auth/<token>", methods=["GET"])
+def q_auth(token):
+    tradie_phone = session_redeem(token)
+    if not tradie_phone:
+        flash("That sign-in link is invalid or expired. Request a new one.", "error")
+        return redirect(url_for("q_login"))
+    session.permanent = True
+    session["tradie_phone"] = tradie_phone
+    flash("Signed in.", "success")
+    return redirect(url_for("q_dashboard"))
+
+
+@app.route("/q/logout", methods=["GET"])
+def q_logout():
+    session.clear()
+    flash("Signed out.", "info")
+    return redirect(url_for("q_login"))
+
+
+@app.route("/q/dashboard", methods=["GET"])
+@require_login
+def q_dashboard():
+    quotes = quote_list_for_tradie(session["tradie_phone"])
+    return render_template("q_dashboard.html", quotes=quotes)
+
+
+@app.route("/q/new", methods=["GET", "POST"])
+@require_login
+def q_new():
+    tradie = find_tradie(session["tradie_phone"])
+    if not tradie:
+        session.clear()
+        flash("Your account couldn't be found. Sign in again.", "error")
+        return redirect(url_for("q_login"))
+
+    if request.method == "POST":
+        customer_name = request.form.get("customer_name", "").strip()
+        customer_phone = request.form.get("customer_phone", "").strip()
+        customer_email = request.form.get("customer_email", "").strip()
+        job_description = request.form.get("job_description", "").strip()
+
+        if not (customer_name and customer_phone and job_description):
+            flash("Customer name, mobile, and job description are required.", "error")
+            return render_template("q_new.html")
+
+        items = draft_quote_items(tradie, job_description)
+        if not items:
+            # Fallback: give the tradie an empty row to fill themselves.
+            items = [{"description": "Labour", "quantity": 1.0, "unit": "hour", "unit_price": 0.0}]
+            flash("Couldn't auto-draft items. Start from a blank row and edit.", "info")
+
+        quote_id = quote_create(
+            tradie=tradie,
+            customer_name=customer_name,
+            customer_phone=customer_phone,
+            customer_email=customer_email,
+            job_description=job_description,
+            items=items,
+        )
+        if not quote_id:
+            flash("Couldn't save the quote. Try again.", "error")
+            return render_template("q_new.html")
+        return redirect(url_for("q_review", quote_id=quote_id))
+
+    return render_template("q_new.html")
+
+
+@app.route("/q/<quote_id>/review", methods=["GET"])
+@require_login
+def q_review(quote_id):
+    quote = quote_get(quote_id)
+    if not quote or _normalise_phone(quote.get("tradie_phone", "")) != session["tradie_phone"]:
+        abort(404)
+    items = quote_items(quote_id)
+    customer_url = f"{PUBLIC_BASE_URL}/quote/{quote_id}"
+    return render_template("q_review.html", quote=quote, items=items, customer_url=customer_url)
+
+
+@app.route("/q/<quote_id>/edit", methods=["POST"])
+@require_login
+def q_edit(quote_id):
+    quote = quote_get(quote_id)
+    if not quote or _normalise_phone(quote.get("tradie_phone", "")) != session["tradie_phone"]:
+        abort(404)
+
+    # Reassemble items from form fields. Keep existing item order by matching item_id prefix.
+    existing = quote_items(quote_id)
+    new_items = []
+    for it in existing:
+        item_id = it["item_id"]
+        new_items.append({
+            "description": request.form.get(f"desc_{item_id}", it["description"]).strip(),
+            "quantity": float(request.form.get(f"qty_{item_id}", it["quantity"]) or 0),
+            "unit": request.form.get(f"unit_{item_id}", it["unit"]).strip(),
+            "unit_price": float(request.form.get(f"price_{item_id}", it["unit_price"]) or 0),
+        })
+    quote_replace_items(quote_id, new_items)
+    quote_update_terms(quote_id, request.form.get("tradie_terms", "").strip())
+
+    action = request.form.get("action", "save")
+    if action == "send" and quote.get("status") == "draft":
+        # Refresh quote (totals will have just been recalculated).
+        quote = quote_get(quote_id)
+        tradie = find_tradie(session["tradie_phone"])
+        if tradie and send_quote_to_customer(tradie, quote):
+            quote_update_status(quote_id, "sent", timestamp_field="sent_at")
+            flash("Quote sent to customer.", "success")
+        else:
+            flash("Saved, but the SMS didn't go through. Check the customer mobile and try again.", "error")
+    else:
+        flash("Changes saved.", "success")
+
+    return redirect(url_for("q_review", quote_id=quote_id))
+
+
+# ----------------------------------------------------------------------------
+# Routes — customer-facing
+# ----------------------------------------------------------------------------
+
+@app.route("/quote/<quote_id>", methods=["GET"])
+def customer_view(quote_id):
+    quote = quote_get(quote_id)
+    if not quote:
+        abort(404)
+    # Mark viewed (only first time).
+    if quote.get("status") == "sent":
+        quote_update_status(quote_id, "viewed", timestamp_field="viewed_at")
+        quote["status"] = "viewed"
+    items = quote_items(quote_id)
+    return render_template("customer_quote.html", quote=quote, items=items)
+
+
+@app.route("/quote/<quote_id>/accept", methods=["POST"])
+def customer_accept(quote_id):
+    quote = quote_get(quote_id)
+    if not quote:
+        abort(404)
+    if quote.get("status") in ("accepted", "declined"):
+        return redirect(url_for("customer_view", quote_id=quote_id))
+    quote_update_status(quote_id, "accepted", timestamp_field="responded_at")
+    tradie_phone = _normalise_phone(quote.get("tradie_phone", ""))
+    tradie = find_tradie(tradie_phone) if tradie_phone else None
+    if tradie:
+        notify_tradie_of_response(tradie, quote, accepted=True)
+    return redirect(url_for("customer_view", quote_id=quote_id))
+
+
+@app.route("/quote/<quote_id>/decline", methods=["POST"])
+def customer_decline(quote_id):
+    quote = quote_get(quote_id)
+    if not quote:
+        abort(404)
+    if quote.get("status") in ("accepted", "declined"):
+        return redirect(url_for("customer_view", quote_id=quote_id))
+    quote_update_status(quote_id, "declined", timestamp_field="responded_at")
+    tradie_phone = _normalise_phone(quote.get("tradie_phone", ""))
+    tradie = find_tradie(tradie_phone) if tradie_phone else None
+    if tradie:
+        notify_tradie_of_response(tradie, quote, accepted=False)
+    return redirect(url_for("customer_view", quote_id=quote_id))
