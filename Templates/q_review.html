@@ -1,0 +1,90 @@
+{% extends "q_base.html" %}
+{% block title %}Review quote — Workbench{% endblock %}
+{% block content %}
+<div class="wrap">
+  <a href="{{ url_for('q_dashboard') }}" class="muted" style="font-family:var(--mono);font-size:13px;">← All quotes</a>
+  <span class="eyebrow">// Quote · {{ quote.quote_id[:8] }}</span>
+  <h1>Review &amp; send</h1>
+
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:24px;flex-wrap:wrap;">
+    <span class="pill pill-{{ quote.status }}">{{ quote.status }}</span>
+    <span class="muted" style="font-family:var(--mono);font-size:13px;">Created {{ quote.created_at[:16] }}</span>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Customer</h2>
+    <p><strong>{{ quote.customer_name }}</strong></p>
+    <p class="muted">{{ quote.customer_phone }}{% if quote.customer_email %} · {{ quote.customer_email }}{% endif %}</p>
+
+    <h2>Job</h2>
+    <p>{{ quote.job_description }}</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Line items</h2>
+    <p class="muted">AI draft — edit any field. Changes save when you click <strong>Save changes</strong>.</p>
+
+    <form method="POST" action="{{ url_for('q_edit', quote_id=quote.quote_id) }}">
+      <table class="qtable">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th style="width:80px;" class="num">Qty</th>
+            <th style="width:90px;">Unit</th>
+            <th style="width:110px;" class="num">Unit price</th>
+            <th style="width:110px;" class="num">Line total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <tr>
+            <td><input type="text" name="desc_{{ item.item_id }}" value="{{ item.description }}" required></td>
+            <td><input type="number" step="0.5" name="qty_{{ item.item_id }}" value="{{ item.quantity }}" required class="num"></td>
+            <td><input type="text" name="unit_{{ item.item_id }}" value="{{ item.unit }}"></td>
+            <td><input type="number" step="0.01" name="price_{{ item.item_id }}" value="{{ '%.2f' % item.unit_price }}" required class="num"></td>
+            <td class="num" style="font-family:var(--mono);padding-top:24px;">${{ '%.2f' % item.line_total }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="totals">
+        <div class="row"><span>Subtotal</span><span>${{ '%.2f' % quote.subtotal }}</span></div>
+        <div class="row"><span>GST (10%)</span><span>${{ '%.2f' % quote.gst }}</span></div>
+        <div class="row total"><span>Total</span><span>${{ '%.2f' % quote.total }}</span></div>
+      </div>
+
+      <div class="field" style="margin-top:32px;">
+        <label for="tradie_terms">Terms (optional)</label>
+        <p class="hint">Shown on the customer's quote page. Payment terms, validity, warranty, anything else.</p>
+        <textarea id="tradie_terms" name="tradie_terms" placeholder="Quote valid 30 days. 50% deposit on acceptance, balance on completion. 12-month workmanship warranty.">{{ quote.tradie_terms }}</textarea>
+      </div>
+
+      <div class="btn-row">
+        <button type="submit" name="action" value="save" class="btn btn-secondary">Save changes</button>
+        {% if quote.status == 'draft' %}
+          <button type="submit" name="action" value="send" class="btn btn-orange">Save &amp; send to customer →</button>
+        {% else %}
+          <a href="{{ customer_url }}" target="_blank" class="btn btn-ghost">View customer's link</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  {% if quote.status != 'draft' %}
+  <div class="card card-paper">
+    <h3 style="margin-top:0;">Status updates</h3>
+    <p>
+      Sent: {{ quote.sent_at[:16] if quote.sent_at else '—' }}<br>
+      Viewed: {{ quote.viewed_at[:16] if quote.viewed_at else 'not yet' }}<br>
+      Responded: {{ quote.responded_at[:16] if quote.responded_at else 'not yet' }}
+    </p>
+    {% if quote.status == 'accepted' %}
+      <p style="color:var(--green);font-weight:600;">✓ Customer accepted the quote.</p>
+    {% elif quote.status == 'declined' %}
+      <p style="color:var(--red);font-weight:600;">✗ Customer declined the quote.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
