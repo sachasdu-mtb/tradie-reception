@@ -1,0 +1,186 @@
+{% extends "q_base.html" %}
+{% block title %}Review quote — Workbench{% endblock %}
+{% block content %}
+<style>
+/* Line-item cards, mobile-first */
+.line-items {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+.line-item {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+.line-item .desc-field { width: 100%; }
+.line-item .desc-field label { margin-bottom: 6px; }
+.line-item .desc-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 15px;
+  min-height: 56px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.li-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr 1.1fr 1fr;
+  gap: 10px;
+  align-items: end;
+}
+@media (max-width: 540px) {
+  .li-grid { grid-template-columns: 1fr 1fr; }
+}
+.li-grid label { margin-bottom: 4px; font-size: 11px; }
+.li-grid input { padding: 10px 12px; font-size: 15px; width: 100%; text-align: right; }
+.li-grid input[name^="unit_"] { text-align: left; }
+.li-grid .line-total {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 16px;
+  text-align: right;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.totals-block {
+  margin-top: 24px;
+  background: var(--paper);
+  padding: 20px;
+  border-radius: 10px;
+}
+.totals-block .row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-family: var(--mono);
+  font-size: 15px;
+}
+.totals-block .row.total {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  border-top: 2px solid var(--ink);
+  margin-top: 10px;
+  padding-top: 14px;
+  color: var(--teal-900);
+}
+</style>
+
+<div class="wrap">
+  <a href="{{ url_for('q_dashboard') }}" class="muted" style="font-family:var(--mono);font-size:13px;">← All quotes</a>
+  <span class="eyebrow">Quote · {{ quote.quote_id[:8] }}</span>
+  <h1>Review &amp; send</h1>
+
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:24px;flex-wrap:wrap;">
+    <span class="pill pill-{{ quote.status }}">{{ quote.status }}</span>
+    <span class="muted" style="font-family:var(--mono);font-size:13px;">Created {{ quote.created_at[:16] }}</span>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Customer</h2>
+    <p><strong>{{ quote.customer_name }}</strong></p>
+    <p class="muted">{{ quote.customer_phone }}{% if quote.customer_email %} · {{ quote.customer_email }}{% endif %}</p>
+
+    <h2>Job</h2>
+    <p>{{ quote.job_description }}</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Line items</h2>
+    <p class="muted">AI draft — edit any field. Changes save when you click <strong>Save changes</strong>.</p>
+
+    <form method="POST" action="{{ url_for('q_edit', quote_id=quote.quote_id) }}">
+      <div class="line-items">
+        {% for item in items %}
+        <div class="line-item">
+          <div class="desc-field">
+            <label>Description</label>
+            <textarea name="desc_{{ item.item_id }}" required rows="2">{{ item.description }}</textarea>
+          </div>
+          <div class="li-grid">
+            <div>
+              <label>Qty</label>
+              <input type="number" step="0.5" min="0" name="qty_{{ item.item_id }}" value="{{ '%g' % item.quantity }}" required>
+            </div>
+            <div>
+              <label>Unit</label>
+              <input type="text" name="unit_{{ item.item_id }}" value="{{ item.unit }}" placeholder="hour, each…">
+            </div>
+            <div>
+              <label>Unit price ($)</label>
+              <input type="number" step="0.01" min="0" name="price_{{ item.item_id }}" value="{{ '%.2f' % item.unit_price }}" required>
+            </div>
+            <div>
+              <label>Line total</label>
+              <div class="line-total">${{ '%.2f' % item.line_total }}</div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="totals-block">
+        <div class="row"><span>Subtotal</span><span>${{ '%.2f' % quote.subtotal }}</span></div>
+        <div class="row"><span>GST (10%)</span><span>${{ '%.2f' % quote.gst }}</span></div>
+        <div class="row total"><span>Total</span><span>${{ '%.2f' % quote.total }}</span></div>
+      </div>
+
+      <div class="field" style="margin-top:32px;">
+        <label for="tradie_terms">Terms (optional)</label>
+        <p class="hint">Shown on the customer's quote page. Payment terms, validity, warranty, etc.</p>
+        <textarea id="tradie_terms" name="tradie_terms" placeholder="Quote valid 30 days. 50% deposit on acceptance, balance on completion. 12-month workmanship warranty.">{{ quote.tradie_terms }}</textarea>
+      </div>
+
+      <div class="btn-row">
+        <button type="submit" name="action" value="save" class="btn btn-secondary">Save changes</button>
+        {% if quote.status == 'draft' %}
+          <button type="submit" name="action" value="send" class="btn btn-orange">Save &amp; send to customer →</button>
+        {% else %}
+          <a href="{{ customer_url }}" target="_blank" class="btn btn-ghost">View customer's link</a>
+        {% endif %}
+      </div>
+      <p class="fine">Note: line totals update after you click <strong>Save changes</strong>.</p>
+    </form>
+  </div>
+
+  {% if quote.status != 'draft' %}
+  <div class="card card-paper">
+    <h3 style="margin-top:0;">Status updates</h3>
+    <p>
+      Sent: {{ quote.sent_at[:16] if quote.sent_at else '—' }}<br>
+      Viewed: {{ quote.viewed_at[:16] if quote.viewed_at else 'not yet' }}<br>
+      Responded: {{ quote.responded_at[:16] if quote.responded_at else 'not yet' }}
+    </p>
+    {% if quote.status == 'accepted' %}
+      <p style="color:var(--green);font-weight:600;">✓ Customer accepted the quote.</p>
+    {% elif quote.status == 'declined' %}
+      <p style="color:var(--red);font-weight:600;">✗ Customer declined the quote.</p>
+    {% endif %}
+  </div>
+
+  {% if quote.status == 'accepted' %}
+  <div class="card">
+    <h3 style="margin-top:0;">Invoice this quote</h3>
+    <p>Creates a DRAFT invoice in your Xero account. You review and send the invoice from Xero — Workbench doesn't send it on your behalf. Once paid, you'll get an SMS notification.</p>
+    <form method="POST" action="{{ url_for('q_create_invoice', quote_id=quote.quote_id) }}" style="margin-top:14px;">
+      <button type="submit" class="btn btn-orange">Create draft invoice in Xero →</button>
+    </form>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

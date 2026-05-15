@@ -1,0 +1,60 @@
+{% extends "q_base.html" %}
+{% block title %}Invoices — Workbench{% endblock %}
+{% block content %}
+<div class="wrap">
+  <span class="eyebrow">Invoices</span>
+  <h1>Your invoices</h1>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:24px;">
+    <p class="muted" style="margin:0;">
+      {{ invoices|length }} invoice{{ '' if invoices|length == 1 else 's' }}
+      {% if xero_connected %}
+        · <span style="color:var(--green);">Xero connected</span>
+      {% else %}
+        · <span style="color:var(--ink-500);">Xero not connected</span>
+      {% endif %}
+    </p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <a href="{{ url_for('q_dashboard') }}" class="btn btn-ghost btn-sm">← Quotes</a>
+      {% if not xero_connected %}
+        <a href="{{ url_for('q_xero_connect') }}" class="btn btn-primary">Connect Xero</a>
+      {% else %}
+        <form method="POST" action="{{ url_for('q_xero_disconnect') }}" style="display:inline;">
+          <button type="submit" class="btn btn-ghost btn-sm">Disconnect Xero</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if invoices %}
+    <div class="quote-list">
+      {% for inv in invoices %}
+        <a href="{{ url_for('q_invoice_view', invoice_id=inv.invoice_id) }}" class="quote-row">
+          <div class="top">
+            <span class="who-name">
+              {{ inv.customer_name or '(no name)' }}
+              {% if inv.invoice_number %} <span class="muted" style="font-family:var(--mono);font-size:13px;">· {{ inv.invoice_number }}</span>{% endif %}
+            </span>
+            <span class="pill pill-{{ inv.status }}">{{ inv.status }}</span>
+          </div>
+          <div class="who-sub">{{ inv.notes_internal or inv.reference or 'Invoice' }}</div>
+          <div class="bottom">
+            <span class="amount">${{ '%.2f' % inv.total }}</span>
+            <span class="meta">{{ inv.issue_date or inv.created_at[:10] }}</span>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty">
+      <h3>No invoices yet</h3>
+      {% if xero_connected %}
+        <p>Once a customer accepts a quote, you can turn it into a Xero invoice from the quote review page.</p>
+      {% else %}
+        <p>Connect your Xero account to start creating invoices from accepted quotes.</p>
+        <p style="margin-top:18px;"><a href="{{ url_for('q_xero_connect') }}" class="btn btn-primary">Connect Xero</a></p>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

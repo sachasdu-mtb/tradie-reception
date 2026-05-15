@@ -1,0 +1,127 @@
+{% extends "q_base.html" %}
+{% block title %}Invoice {{ invoice.invoice_number or invoice.invoice_id[:8] }} — Workbench{% endblock %}
+{% block content %}
+<style>
+.inv-lines { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.inv-line {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 6px;
+}
+.inv-line .top { display: flex; justify-content: space-between; gap: 12px; }
+.inv-line .desc { font-weight: 500; }
+.inv-line .total { font-family: var(--mono); font-weight: 600; }
+.inv-line .sub { font-family: var(--mono); font-size: 12px; color: var(--ink-500); }
+.totals-block {
+  margin-top: 24px;
+  background: var(--paper);
+  padding: 20px;
+  border-radius: 10px;
+}
+.totals-block .row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-family: var(--mono);
+  font-size: 15px;
+}
+.totals-block .row.total {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  border-top: 2px solid var(--ink);
+  margin-top: 10px;
+  padding-top: 14px;
+  color: var(--teal-900);
+}
+</style>
+
+<div class="wrap">
+  <a href="{{ url_for('q_invoices_list') }}" class="muted" style="font-family:var(--mono);font-size:13px;">← All invoices</a>
+  <span class="eyebrow">Invoice · {{ invoice.invoice_number or invoice.invoice_id[:8] }}</span>
+  <h1>Invoice</h1>
+
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:24px;flex-wrap:wrap;">
+    <span class="pill pill-{{ invoice.status }}">{{ invoice.status }}</span>
+    <span class="muted" style="font-family:var(--mono);font-size:13px;">Created {{ invoice.created_at[:16] }}</span>
+    {% if invoice.last_sync_at %}
+      <span class="muted" style="font-family:var(--mono);font-size:13px;">Last sync {{ invoice.last_sync_at[:16] }}</span>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Customer</h2>
+    <p><strong>{{ invoice.customer_name }}</strong></p>
+    <p class="muted">{{ invoice.customer_phone }}{% if invoice.customer_email %} · {{ invoice.customer_email }}{% endif %}</p>
+
+    <h2>Dates</h2>
+    <p>
+      Issued: {{ invoice.issue_date }}<br>
+      Due: {{ invoice.due_date }} ({{ invoice.payment_terms_days }} day terms)
+      {% if invoice.paid_date %}<br>Paid: {{ invoice.paid_date }}{% endif %}
+    </p>
+
+    {% if invoice.reference %}
+      <h2>Reference</h2>
+      <p style="font-family:var(--mono);font-size:14px;">{{ invoice.reference }}</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Line items</h2>
+    <div class="inv-lines">
+      {% for ln in lines %}
+        <div class="inv-line">
+          <div class="top">
+            <span class="desc">{{ ln.description }}</span>
+            <span class="total">${{ '%.2f' % ln.line_total }}</span>
+          </div>
+          <span class="sub">
+            {{ '%g' % ln.quantity }}{% if ln.unit %} {{ ln.unit }}{% endif %}
+            × ${{ '%.2f' % ln.unit_price }}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="totals-block">
+      <div class="row"><span>Subtotal</span><span>${{ '%.2f' % invoice.subtotal }}</span></div>
+      <div class="row"><span>GST</span><span>${{ '%.2f' % invoice.tax_total }}</span></div>
+      <div class="row total"><span>Total</span><span>${{ '%.2f' % invoice.total }}</span></div>
+      {% if invoice.amount_paid > 0 %}
+        <div class="row" style="margin-top:14px;color:var(--green);"><span>Paid</span><span>${{ '%.2f' % invoice.amount_paid }}</span></div>
+        <div class="row"><span>Balance due</span><span>${{ '%.2f' % invoice.amount_due }}</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if invoice.notes_customer %}
+  <div class="card card-paper">
+    <h3 style="margin-top:0;">Terms</h3>
+    <p style="white-space:pre-wrap;">{{ invoice.notes_customer }}</p>
+  </div>
+  {% endif %}
+
+  <div class="btn-row">
+    {% if invoice.external_url %}
+      <a href="{{ invoice.external_url }}" target="_blank" rel="noopener" class="btn btn-orange">Open in Xero →</a>
+    {% endif %}
+    {% if invoice.external_invoice_id %}
+      <form method="POST" action="{{ url_for('q_invoice_resync', invoice_id=invoice.invoice_id) }}" style="display:inline;">
+        <button type="submit" class="btn btn-ghost">Refresh status</button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if invoice.status == 'failed' %}
+    <div class="card card-paper" style="margin-top:24px;border-left:3px solid var(--red);">
+      <p style="color:var(--red);font-weight:600;margin-bottom:8px;">Xero sync failed.</p>
+      <p>The invoice was created in Workbench but couldn't be pushed to Xero. Check your Xero connection is active and retry the invoice from the original quote.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
