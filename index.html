@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0D7377">
+<title>Workbench — From customer text to paid invoice. Hands-free.</title>
+<meta name="description" content="The only AI assistant for Australian tradies and food trucks that handles the whole loop. 24/7 customer reception, AI-drafted quotes, one-tap accounting integration. Xero today; your choice of accounting tomorrow. Half the price of the $300/month players.">
+<link rel="canonical" href="https://workbenchhq.org/">
+<meta property="og:title" content="Workbench — From customer text to paid invoice. Hands-free.">
+<meta property="og:description" content="The only Australian AI assistant that takes a tradie's customer from first SMS through to a paid Xero invoice. Half the price of the $300/month players.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://workbenchhq.org/">
+<meta property="og:site_name" content="Workbench">
+<meta property="og:locale" content="en_AU">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Workbench — From customer text to paid invoice. Hands-free.">
+<meta name="twitter:description" content="The only AI assistant that handles the whole loop. Try the demo: +61 485 067 607">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://workbenchhq.org/#organization",
+      "name": "Workbench",
+      "url": "https://workbenchhq.org/",
+      "logo": "https://workbenchhq.org/favicon.svg",
+      "description": "The only AI assistant for Australian tradies and food trucks that handles the whole loop — 24/7 customer reception, AI-drafted quotes, one-tap invoicing into Xero (with MYOB and QuickBooks next). Built by a solo founder on the Sunshine Coast. Half the price of mid-market competitors.",
+      "email": "hello@workbenchhq.org",
+      "telephone": "+61485050078",
+      "areaServed": "AU",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Sunshine Coast",
+        "addressRegion": "QLD",
+        "addressCountry": "AU"
+      },
+      "sameAs": [
+        "https://www.linkedin.com/company/workbenchhq/"
+      ]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://workbenchhq.org/#website",
+      "url": "https://workbenchhq.org/",
+      "name": "Workbench",
+      "publisher": { "@id": "https://workbenchhq.org/#organization" },
+      "inLanguage": "en-AU"
+    },
+    {
+      "@type": "Service",
+      "name": "Workbench Reception",
+      "provider": { "@id": "https://workbenchhq.org/#organization" },
+      "areaServed": "AU",
+      "description": "Automated AI receptionist for Australian tradies and food trucks. Joe answers customer texts and calls 24/7 in your business voice, captures every lead, and pings you the moment something needs your attention.",
+      "offers": {
+        "@type": "Offer",
+        "price": "150",
+        "priceCurrency": "AUD",
+        "priceSpecification": {
+          "@type": "UnitPriceSpecification",
+          "price": "150",
+          "priceCurrency": "AUD",
+          "unitText": "MONTH"
+        }
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Will my customers know it's automated?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Possibly, yes. Joe is natural and conversational but does not pretend to be human. Most customers do not care, especially when their text gets answered at 9pm on a Saturday. The alternative is no answer at all."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What if Joe gets an answer wrong?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Joe sticks to what is in your business profile. She will not invent things. If a customer asks something she does not know, she says she will check with you and takes their details. Every conversation is logged in your Google Sheet."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need a new phone number?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Your service includes a dedicated Australian mobile number, set up for you. Use it on business cards, website, vehicle signage, Google Business listing."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What happens if I cancel?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Month-to-month, no lock-in. Cancel any time. Your conversation log stays in your Google Sheet. We deactivate the number within 24 hours."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Where is Workbench available?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Australia-wide. Workbench is based on the Sunshine Coast and supports tradies in every state and territory."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700;12..96,800&family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   WORKBENCH RECEPTION
+   ============================================================ */
+:root {
+  --teal-900: #0A5A5D;
+  --teal-700: #0D7377;
+  --teal-500: #2A9499;
+  --teal-100: #E0F0F0;
+  --orange:   #E8541C;
+  --amber:    #F5A623;
+  --cream:    #FAF7F0;
+  --paper:    #F5F0E6;
+  --ink:      #1A1A1A;
+  --ink-700:  #3A3A3A;
+  --ink-500:  #6B6B6B;
+  --line:     #E8E2D4;
+  --line-strong: #C9C2B0;
+  --white:    #FFFFFF;
+
+  --display: 'Bricolage Grotesque', Georgia, serif;
+  --body:    'Manrope', system-ui, sans-serif;
+  --mono:    'DM Mono', ui-monospace, Menlo, monospace;
+
+  --radius: 4px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(20,30,30,0.04), 0 4px 12px rgba(20,30,30,0.04);
+  --shadow-md: 0 4px 6px rgba(20,30,30,0.05), 0 12px 32px rgba(20,30,30,0.08);
+
+  --container: 1140px;
+  --gutter: 24px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--cream);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+img { max-width: 100%; display: block; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; cursor: pointer; border: none; background: none; }
+
+/* Selection */
+::selection { background: var(--teal-700); color: var(--cream); }
+
+/* Container */
+.wrap {
+  max-width: var(--container);
+  margin: 0 auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+
+/* Mono label — used as section eyebrow */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal-700);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.eyebrow::before {
+  content: "//";
+  color: var(--orange);
+  font-weight: 500;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.site-header {
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--cream);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.site-header .wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.brand .slash {
+  color: var(--orange);
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 18px;
+}
+.brand .product {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-500);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  align-self: center;
+  padding: 4px 8px;
+  background: var(--paper);
+  border-radius: var(--radius);
+}
+.header-ctas {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.header-cta {
+  font-family: var(--mono);
+  font-size: 13px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 100px;
+  transition: border-color 160ms, color 160ms, background 160ms;
+  white-space: nowrap;
+}
+.header-cta-secondary {
+  color: var(--ink-700);
+  border: 1px solid var(--line-strong);
+  background: transparent;
+}
+.header-cta-secondary:hover {
+  border-color: var(--teal-700);
+  color: var(--teal-700);
+  background: var(--teal-100);
+}
+.header-cta-primary {
+  color: #fff;
+  background: var(--orange);
+  border: 1px solid var(--orange);
+  font-weight: 700;
+}
+.header-cta-primary:hover {
+  background: #C8470E;
+  border-color: #C8470E;
+}
+.header-cta .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 0 rgba(232,84,28,0.6);
+  animation: pulse 2.5s ease-out infinite;
+}
+.header-cta-primary .dot { background: #fff; }
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(232,84,28,0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(232,84,28,0); }
+  100% { box-shadow: 0 0 0 0 rgba(232,84,28,0); }
+}
+@media (max-width: 380px) {
+  .header-cta-secondary .label { display: none; }
+  .header-cta-secondary { padding: 8px 10px; }
+}
+
+/* Hero signup CTA row */
+.hero-cta-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 32px;
+}
+
+.btn-large {
+  padding: 14px 24px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.btn-orange {
+  background: var(--orange);
+  color: #fff;
+  border: 2px solid var(--orange);
+  box-shadow: 0 4px 12px rgba(232,84,28,0.25);
+}
+.btn-orange:hover {
+  background: #C8470E;
+  border-color: #C8470E;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(232,84,28,0.35);
+}
+
+/* Adaptive secondary CTA — show call on touch/mobile, email on desktop */
+.cta-call { display: none; }
+.cta-email { display: inline-flex; }
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  .cta-call { display: inline-flex; }
+  .cta-email { display: none; }
+}
+
+/* Sticky mobile bottom bar — appears below the fold on mobile only */
+.mobile-sticky-cta {
+  display: none;
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 1000;
+  background: var(--orange);
+  color: #fff;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 15px;
+  text-align: center;
+  padding: 14px 20px;
+  border-radius: 100px;
+  text-decoration: none;
+  box-shadow: 0 8px 24px rgba(232,84,28,0.4);
+}
+.mobile-sticky-cta:hover { background: #C8470E; }
+@media (max-width: 768px) {
+  .mobile-sticky-cta.is-visible { display: block; }
+}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero {
+  padding: 80px 0 60px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(13,115,119,0.08) 1px, transparent 0);
+  background-size: 24px 24px;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+}
+.hero .wrap { position: relative; }
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 56px;
+  align-items: center;
+}
+@media (min-width: 900px) {
+  .hero-grid { grid-template-columns: 1.1fr 1fr; gap: 80px; }
+}
+.hero h1 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(44px, 7vw, 84px);
+  line-height: 0.96;
+  letter-spacing: -0.04em;
+  margin-top: 24px;
+  color: var(--ink);
+}
+.hero h1 .accent {
+  color: var(--teal-700);
+  position: relative;
+  display: inline-block;
+}
+.hero h1 .accent::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 6%;
+  height: 14%;
+  background: var(--amber);
+  z-index: -1;
+  opacity: 0.7;
+}
+.hero p.lede {
+  font-size: clamp(17px, 1.8vw, 21px);
+  line-height: 1.5;
+  color: var(--ink-700);
+  margin-top: 24px;
+  max-width: 540px;
+}
+.hero .meta {
+  margin-top: 36px;
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-500);
+}
+.hero .meta strong {
+  color: var(--ink);
+  font-weight: 500;
+  margin-right: 6px;
+}
+
+/* Demo card */
+.demo-card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 36px 32px;
+  position: relative;
+  box-shadow: var(--shadow-md);
+}
+.demo-card::before {
+  content: "";
+  position: absolute;
+  top: -1px; left: 24px; right: 24px;
+  height: 4px;
+  background: linear-gradient(90deg, var(--teal-700) 0%, var(--teal-700) 60%, var(--orange) 60%, var(--orange) 80%, var(--amber) 80%, var(--amber) 100%);
+  border-radius: 0 0 4px 4px;
+}
+.demo-card .label {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+  margin-bottom: 8px;
+}
+.demo-card .demo-title {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+  color: var(--ink);
+}
+.demo-number {
+  font-family: var(--mono);
+  font-size: clamp(28px, 4.5vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  display: block;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+  background: var(--paper);
+  margin: 0 -32px;
+}
+.demo-actions {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  transition: transform 120ms, background 160ms, color 160ms, border-color 160ms;
+  min-height: 48px;
+  border: 1px solid transparent;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--teal-700);
+  color: var(--cream);
+  border-color: var(--teal-700);
+}
+.btn-primary:hover { background: var(--teal-900); border-color: var(--teal-900); }
+.btn-secondary {
+  background: var(--white);
+  color: var(--teal-700);
+  border-color: var(--teal-700);
+}
+.btn-secondary:hover { background: var(--teal-100); }
+.btn-orange {
+  background: var(--orange);
+  color: var(--cream);
+  border-color: var(--orange);
+}
+.btn-orange:hover { background: #c04812; border-color: #c04812; }
+.demo-card .helptext {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-500);
+  text-align: center;
+}
+
+/* ============================================================
+   GENERIC SECTION
+   ============================================================ */
+section { padding: 100px 0; position: relative; }
+section.alt { background: var(--white); }
+section.dark { background: var(--teal-900); color: var(--cream); }
+
+.section-head {
+  max-width: 720px;
+  margin-bottom: 56px;
+}
+.section-head h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(32px, 4.5vw, 52px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin-top: 14px;
+  color: inherit;
+}
+.section-head p {
+  margin-top: 18px;
+  font-size: 18px;
+  color: var(--ink-700);
+  max-width: 600px;
+}
+.dark .section-head p { color: rgba(250,247,240,0.8); }
+.dark .eyebrow { color: var(--amber); }
+.dark .eyebrow::before { color: var(--orange); }
+
+/* ============================================================
+   THE LOOP
+   ============================================================ */
+.loop-steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+@media (min-width: 980px) {
+  .loop-steps {
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 16px;
+  }
+}
+.loop-step {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px 28px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.loop-num {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: var(--teal);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.loop-step h3 {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+.loop-step p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-700);
+  margin: 0 0 20px;
+  flex: 1;
+}
+.loop-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--teal-dark);
+  background: var(--teal-100);
+  padding: 6px 10px;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+.loop-arrow {
+  display: none;
+  font-size: 32px;
+  color: var(--orange);
+  align-self: center;
+  font-weight: 300;
+}
+@media (min-width: 980px) {
+  .loop-arrow { display: block; }
+}
+.loop-footnote {
+  margin-top: 40px;
+  padding: 24px 28px;
+  background: var(--teal-100);
+  border-left: 4px solid var(--teal);
+  border-radius: 4px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.loop-footnote strong { color: var(--teal-dark); }
+
+/* ============================================================
+   DEMO SCENARIOS
+   ============================================================ */
+.scenarios {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 700px) {
+  .scenarios { grid-template-columns: repeat(2, 1fr); }
+}
+.scenario {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: border-color 160ms, transform 200ms;
+}
+.scenario:hover {
+  border-color: var(--teal-700);
+  transform: translateY(-2px);
+}
+.scenario .num {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--orange);
+  letter-spacing: 0.06em;
+}
+.scenario h3 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.scenario .sample {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--teal-900);
+  background: var(--teal-100);
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--teal-700);
+  line-height: 1.45;
+}
+.scenario .what {
+  font-size: 14px;
+  color: var(--ink-500);
+  line-height: 1.5;
+}
+.scenario .send {
+  margin-top: auto;
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--teal-700);
+  text-decoration: none;
+  border-bottom: 1.5px solid var(--teal-700);
+  padding-bottom: 1px;
+  transition: color 160ms, border-color 160ms;
+}
+.scenario .send:hover {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+
+/* ============================================================
+   EXAMPLE CONVERSATION (phone mockup)
+   ============================================================ */
+.example {
+  background: var(--paper);
+  padding: 100px 0;
+}
+.example-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 56px;
+  align-items: center;
+}
+@media (min-width: 900px) {
+  .example-grid { grid-template-columns: 1fr 0.9fr; gap: 80px; }
+}
+.example-copy h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin-top: 14px;
+}
+.example-copy p {
+  margin-top: 20px;
+  color: var(--ink-700);
+  font-size: 17px;
+}
+.example-meta {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-500);
+}
+.example-meta span { display: inline-flex; gap: 10px; align-items: baseline; }
+.example-meta .key { color: var(--teal-700); width: 80px; flex-shrink: 0; }
+
+.phone {
+  background: linear-gradient(180deg, #f9f9f9 0%, #ececec 100%);
+  border-radius: 28px;
+  padding: 18px 14px;
+  border: 1px solid var(--line-strong);
+  box-shadow:
+    var(--shadow-md),
+    inset 0 0 0 6px #fff,
+    inset 0 0 0 7px rgba(0,0,0,0.05);
+  max-width: 380px;
+  margin: 0 auto;
+}
+.phone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-500);
+}
+.phone-header .center { font-weight: 500; color: var(--ink); }
+.bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0 4px;
+}
+.bubble {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 14.5px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+.bubble.them {
+  background: #E5E5EA;
+  color: var(--ink);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+.bubble.me {
+  background: var(--teal-700);
+  color: var(--cream);
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+.bubble .ts {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-bottom: 2px;
+  opacity: 0.55;
+  letter-spacing: 0.04em;
+}
+.urgent-tag {
+  display: inline-block;
+  background: var(--orange);
+  color: var(--cream);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding: 3px 7px;
+  border-radius: 3px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   FEATURES (what's included)
+   ============================================================ */
+.features {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+@media (min-width: 700px) {
+  .features { grid-template-columns: 1fr 1fr; }
+  .features > .feat:nth-child(odd) { border-right: 1px solid var(--line); }
+}
+.feat {
+  padding: 28px 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 18px;
+}
+@media (min-width: 700px) {
+  .feat { padding: 32px 32px 32px 0; }
+  .feat:nth-child(even) { padding-left: 32px; padding-right: 0; }
+}
+.feat .num {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--orange);
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+.feat h3 {
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.feat p {
+  font-size: 15px;
+  color: var(--ink-700);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   PRICING
+   ============================================================ */
+.pricing {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 40px;
+  align-items: start;
+}
+@media (min-width: 800px) {
+  .pricing { grid-template-columns: 1fr 1fr; gap: 56px; }
+}
+.price-panel {
+  background: var(--cream);
+  border: 1px solid var(--cream);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  position: relative;
+}
+.price-panel.featured {
+  background: var(--white);
+  border-color: var(--teal-700);
+  box-shadow: var(--shadow-md);
+}
+.price-panel.featured::before {
+  content: "PILOT OFFER";
+  position: absolute;
+  top: -10px; left: 24px;
+  background: var(--orange);
+  color: var(--cream);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 3px;
+}
+.price-panel h3 {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: 12px;
+}
+.price-panel .price-line {
+  margin: 24px 0 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.price-panel .amount {
+  font-family: var(--display);
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--teal-700);
+  line-height: 1;
+}
+.price-panel.featured .amount { color: var(--orange); }
+.price-panel .per {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink-500);
+}
+.price-panel .setup {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink-700);
+  padding: 10px 14px;
+  background: var(--paper);
+  border-radius: var(--radius);
+  display: inline-block;
+}
+.price-panel.featured .setup { background: var(--teal-100); color: var(--teal-900); }
+.price-panel .terms {
+  margin-top: 20px;
+  list-style: none;
+  font-size: 14px;
+  color: var(--ink-700);
+}
+.price-panel .terms li {
+  padding: 6px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.price-panel .terms li::before {
+  content: "—";
+  color: var(--teal-700);
+  flex-shrink: 0;
+  font-family: var(--mono);
+}
+
+/* ============================================================
+   TRADE TYPES
+   ============================================================ */
+.trades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.trade {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  color: var(--ink);
+  transition: all 160ms;
+}
+.trade:hover {
+  background: var(--teal-100);
+  border-color: var(--teal-700);
+  color: var(--teal-900);
+}
+.trade-coda {
+  margin-top: 32px;
+  font-size: 17px;
+  color: var(--ink-700);
+  max-width: 600px;
+  font-style: italic;
+}
+
+/* ============================================================
+   FAQ
+   ============================================================ */
+.faq-list {
+  max-width: 800px;
+}
+.faq-item {
+  border-top: 1px solid var(--line);
+  padding: 0;
+}
+.faq-item:last-child { border-bottom: 1px solid var(--line); }
+.faq-item summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 24px 36px 24px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  position: relative;
+  transition: color 160ms;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after {
+  content: "+";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--teal-700);
+  transition: transform 220ms ease;
+  width: 28px; height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.faq-item[open] summary::after { transform: translateY(-50%) rotate(45deg); }
+.faq-item summary:hover { color: var(--teal-700); }
+.faq-item .answer {
+  padding: 0 60px 28px 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink-700);
+}
+
+/* ============================================================
+   ABOUT / CTA STRIP / FOOTER
+   ============================================================ */
+.about {
+  background: var(--teal-900);
+  color: var(--cream);
+}
+.about .wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 40px;
+  align-items: center;
+}
+@media (min-width: 800px) {
+  .about .wrap { grid-template-columns: 1fr 1.4fr; gap: 80px; }
+}
+.about h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(32px, 4vw, 48px);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin-top: 14px;
+}
+.about-body p {
+  font-size: 17px;
+  line-height: 1.65;
+  margin-bottom: 16px;
+  color: rgba(250,247,240,0.85);
+}
+.about-body p:last-child { margin-bottom: 0; }
+.about .eyebrow { color: var(--amber); }
+
+.cta-strip {
+  background: var(--orange);
+  color: var(--cream);
+  padding: 56px 0;
+  text-align: center;
+}
+.cta-strip h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(28px, 4vw, 40px);
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+  line-height: 1.1;
+}
+.cta-strip .number {
+  font-family: var(--mono);
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  display: inline-block;
+  margin-bottom: 24px;
+  color: var(--cream);
+}
+.cta-strip .actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.cta-strip .btn-primary {
+  background: var(--cream);
+  color: var(--orange);
+  border-color: var(--cream);
+}
+.cta-strip .btn-primary:hover { background: var(--white); }
+.cta-strip .btn-secondary {
+  background: transparent;
+  color: var(--cream);
+  border-color: var(--cream);
+}
+.cta-strip .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+
+footer.site-footer {
+  background: var(--ink);
+  color: rgba(250,247,240,0.75);
+  padding: 56px 0 32px;
+  font-size: 14px;
+}
+footer.site-footer .wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 40px;
+}
+@media (min-width: 800px) {
+  footer.site-footer .wrap { grid-template-columns: 1fr 2fr; }
+}
+footer .brand {
+  color: var(--cream);
+}
+footer .privacy h4 {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 14px;
+}
+footer .privacy p {
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+footer .legal {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(250,247,240,0.1);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(250,247,240,0.5);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  grid-column: 1 / -1;
+}
+
+/* ============================================================
+   ANIMATIONS — subtle, respectful
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    animation: revealIn 800ms cubic-bezier(0.2,0.7,0.2,1) forwards;
+    animation-delay: var(--delay, 0ms);
+  }
+  @keyframes revealIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* ============================================================
+   FINE PRINT
+   ============================================================ */
+.fineprint {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-500);
+  margin-top: 20px;
+}
+
+/* ============================================================
+   OPTIONAL EXTRAS
+   ============================================================ */
+.extras {
+  margin-top: 56px;
+  padding-top: 40px;
+  border-top: 1px solid var(--line);
+}
+.extras-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.extras-head h3 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.extras-head p {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-500);
+}
+.extras-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 700px) {
+  .extras-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 980px) {
+  .extras-grid { grid-template-columns: 1fr 1fr 1fr; }
+}
+.extra-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  position: relative;
+}
+.extra-card.pilot {
+  background: #FFFAF0;
+  border-color: var(--amber);
+  border-width: 2px;
+}
+.extra-card .pilot-badge {
+  position: absolute;
+  top: -10px;
+  right: 18px;
+  background: var(--amber);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+.extra-card h4 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.extra-card .who {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--teal-700);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.extra-card p {
+  font-size: 14px;
+  color: var(--ink-700);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.extra-card .extra-price {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 500;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+.extras-coda {
+  margin-top: 24px;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-500);
+}
+</style>
+</head>
+<body>
+
+<!-- ============================== HEADER ============================== -->
+<header class="site-header">
+  <div class="wrap">
+    <a href="#top" class="brand" aria-label="Workbench home">
+      <span class="slash">//</span>
+      <span>Workbench</span>
+    </a>
+    <div class="header-ctas">
+      <a class="header-cta header-cta-secondary" href="tel:+61485067607">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="label">Try Joe</span>
+      </a>
+      <a class="header-cta header-cta-primary" href="/start">
+        <span class="label">Start a pilot</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- ============================== HERO ============================== -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div class="hero-copy reveal">
+        <span class="eyebrow">Workbench  ·  Australian-built</span>
+        <h1>From customer text<br>to <span class="accent">paid invoice</span>.<br>Hands-free.</h1>
+        <p class="lede">
+          The only AI assistant for Australian tradies and food trucks that handles the whole loop —
+          customer answers 24/7, AI-drafted quotes sent by SMS, one-tap invoices into your accounting system.
+          Built by one person on the Sunshine Coast. Half the price of the $300/month players. No lock-in, ever.
+        </p>
+        <div class="meta">
+          <span><strong>Live now</strong>SMS + Voice + Quotes</span>
+          <span><strong>Today</strong>Xero invoicing</span>
+          <span><strong>Soon</strong>MYOB &amp; QuickBooks</span>
+        </div>
+        <div class="hero-cta-row">
+          <a href="/start" class="btn btn-orange btn-large">Start a pilot →</a>
+          <a href="tel:+61485050078" class="btn btn-secondary btn-large cta-call">Or call: +61 485 050 078</a>
+          <a href="mailto:hello@workbenchhq.org?subject=Workbench%20pilot%20enquiry&body=Hi%20Sacha%2C%0A%0AI%27m%20interested%20in%20a%20Workbench%20pilot.%0A%0AAbout%20my%20business%3A%0A-%20Name%3A%0A-%20Trade%2Ftype%3A%0A-%20Location%3A%0A-%20Mobile%3A%0A%0AThanks%2C" class="btn btn-secondary btn-large cta-email">Or email: hello@workbenchhq.org</a>
+        </div>
+        <p style="font-size:13px; color:var(--ink-500); margin-top:14px; font-family:var(--mono);">
+          Founding spots limited. Reply within 24 hours, founder direct.
+        </p>
+      </div>
+
+      <div class="demo-card reveal" style="--delay: 200ms;">
+        <div class="label">Live demo line</div>
+        <div class="demo-title">Try Joe yourself.</div>
+        <p style="font-size:14px; color:var(--ink-500); margin-bottom:20px;">
+          Joe is currently answering for <strong style="color:var(--ink);">Sunshine Plumbing &amp; Gas</strong>,
+          a fictional plumber on the Sunshine Coast. Try her like a real customer would.
+        </p>
+        <a href="tel:+61485067607" class="demo-number" aria-label="Call demo line">
+          +61 485 067 607
+        </a>
+        <div class="demo-actions">
+          <a href="sms:+61485067607?&body=Hi%20Joe%2C%20how%20much%20to%20unblock%20a%20kitchen%20drain%20in%20Buderim%3F" class="btn btn-primary">Send a text</a>
+          <a href="tel:+61485067607" class="btn btn-secondary">Make a call</a>
+        </div>
+        <p class="helptext">No registration. Real Joe. Real responses.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== THE LOOP ============================== -->
+<section id="the-loop">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">01 / The loop</span>
+      <h2>The whole journey, automated.</h2>
+      <p>Every other AI receptionist stops at "captured the lead." Workbench takes it all the way through to the bank. One thread. Three steps. No copy-paste between five different tools.</p>
+    </div>
+
+    <div class="loop-steps">
+      <div class="loop-step">
+        <div class="loop-num">1</div>
+        <h3>Customer texts or calls</h3>
+        <p>Joe answers in your business voice, 24/7. Captures the job details, dietary requirements, addresses, dates. Urgent stuff pings your phone in seconds. Routine stuff she handles herself.</p>
+        <span class="loop-tag">Reception · Live</span>
+      </div>
+
+      <div class="loop-arrow">→</div>
+
+      <div class="loop-step">
+        <div class="loop-num">2</div>
+        <h3>You draft a quote in 60 seconds</h3>
+        <p>Open Workbench on your phone. Type a quick brief — what, where, any extras. AI drafts the line items grounded in your pricing. Tap send. Customer gets an SMS with a link. They accept with one tap.</p>
+        <span class="loop-tag">Quotes · Live</span>
+      </div>
+
+      <div class="loop-arrow">→</div>
+
+      <div class="loop-step">
+        <div class="loop-num">3</div>
+        <h3>Invoice posts to your books</h3>
+        <p>Accepted quote becomes a draft invoice in your accounting system. Customer contact synced. GST handled. You review and send from your books. When payment lands, we text you.</p>
+        <span class="loop-tag">Xero today · MYOB &amp; QuickBooks next</span>
+      </div>
+    </div>
+
+    <div class="loop-footnote">
+      <strong>Your choice of accounting.</strong> Xero is live today, included free for founding clients. MYOB and QuickBooks adapters are next — same one-tap experience, different books. If you don't use any of those yet, Workbench still runs the first two steps perfectly.
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SCENARIOS ============================== -->
+<section class="alt" id="scenarios">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">02 / See Joe in action</span>
+      <h2>Pick a scenario. See Joe handle it.</h2>
+      <p>Each scenario tests a different part of the product. Tap to send the message — Joe replies in seconds.</p>
+    </div>
+
+    <div class="scenarios">
+      <article class="scenario reveal">
+        <span class="num">A · ROUTINE QUOTE</span>
+        <h3>Asking for a price on a standard job</h3>
+        <div class="sample">"Hi, how much to unblock a kitchen drain in Buderim?"</div>
+        <p class="what">Joe handles a routine enquiry, gives a real price range, and asks the right qualifying questions.</p>
+        <a class="send" href="sms:+61485067607?&body=Hi%2C%20how%20much%20to%20unblock%20a%20kitchen%20drain%20in%20Buderim%3F">→ Send this text</a>
+      </article>
+
+      <article class="scenario reveal" style="--delay: 100ms;">
+        <span class="num">B · URGENT EMERGENCY</span>
+        <h3>A burst pipe at 9pm on a Saturday</h3>
+        <div class="sample">"Burst pipe in my laundry, water everywhere!"</div>
+        <p class="what">Joe identifies urgency, takes details, and triggers an instant alert to the tradie's phone.</p>
+        <a class="send" href="sms:+61485067607?&body=Burst%20pipe%20in%20my%20laundry%2C%20water%20everywhere%21">→ Send this text</a>
+      </article>
+
+      <article class="scenario reveal" style="--delay: 150ms;">
+        <span class="num">C · OUT OF SCOPE</span>
+        <h3>Asking about something the tradie doesn't do</h3>
+        <div class="sample">"Do you do commercial fitouts?"</div>
+        <p class="what">Joe stays in scope. No inventing services. No overselling. She'll check with the tradie if she's unsure.</p>
+        <a class="send" href="sms:+61485067607?&body=Do%20you%20do%20commercial%20fitouts%3F">→ Send this text</a>
+      </article>
+
+      <article class="scenario reveal" style="--delay: 200ms;">
+        <span class="num">D · VOICE → SMS HANDOFF</span>
+        <h3>Calling and having Joe text you for details</h3>
+        <div class="sample">Call the number and say: "I need to replace my hot water system."</div>
+        <p class="what">Joe greets you, qualifies the job, then SMSes you afterwards to capture details accurately — no mangled suburb names.</p>
+        <a class="send" href="tel:+61485067607">→ Make the call</a>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== EXAMPLE CONVERSATION ============================== -->
+<section class="example">
+  <div class="wrap">
+    <div class="example-grid">
+      <div class="example-copy">
+        <span class="eyebrow">03 / Example conversation</span>
+        <h2>What it looks like, end to end.</h2>
+        <p>
+          A real (sanitised) exchange between Joe and a customer. Saturday night,
+          hot water gone cold. Joe acknowledges, qualifies, books, all without you
+          touching the phone.
+        </p>
+        <div class="example-meta">
+          <span><span class="key">Time</span><span>Sat, 9:42pm</span></span>
+          <span><span class="key">Customer</span><span>Routine after-hours job</span></span>
+          <span><span class="key">Joe's task</span><span>Confirm scope, set expectation, handoff</span></span>
+          <span><span class="key">Tradie's role</span><span>Ringing customer back next morning</span></span>
+        </div>
+      </div>
+
+      <aside class="phone" aria-label="Example SMS conversation">
+        <div class="phone-header">
+          <span>9:42 PM</span>
+          <span class="center">Sunshine Plumbing &amp; Gas</span>
+          <span>100%</span>
+        </div>
+        <div class="bubbles">
+          <div class="bubble them">
+            <span class="ts">9:42 PM</span>
+            Hot water's gone cold and the pilot won't light, can someone come tomorrow?
+          </div>
+          <div class="bubble me">
+            <span class="ts">9:42 PM · Joe</span>
+            Hi, you've reached Sunshine Plumbing &amp; Gas. We can definitely help with hot water. Sounds like a pilot light or thermocouple — usually a quick fix. Tomorrow's Sunday so it'll be after-hours rates ($250 callout, parts on top). Want me to book you in for around 9am?
+          </div>
+          <div class="bubble them">
+            <span class="ts">9:43 PM</span>
+            Yeah that works
+          </div>
+          <div class="bubble me">
+            <span class="ts">9:43 PM · Joe</span>
+            Beauty. Can I grab your name, suburb, and the make of the unit if you can read it?
+          </div>
+          <div class="bubble them">
+            <span class="ts">9:45 PM</span>
+            Mark, Maroochydore, it's a Rinnai
+          </div>
+          <div class="bubble me">
+            <span class="ts">9:45 PM · Joe</span>
+            All booked, Mark. Tradie will text when they're 15 min out. Cheers.
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== WHATS INCLUDED ============================== -->
+<section class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">04 / What's included</span>
+      <h2>Everything you need to never miss a job.</h2>
+    </div>
+
+    <div class="features">
+      <div class="feat">
+        <span class="num">01</span>
+        <div>
+          <h3>Dedicated AU mobile number</h3>
+          <p>SMS and voice on a real Australian number. Use it on cards, vehicles, your Google Business listing.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <span class="num">02</span>
+        <div>
+          <h3>24/7 customer answering</h3>
+          <p>Every text answered in seconds. Every call picked up. After-hours, on the tools, in the middle of a job.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <span class="num">03</span>
+        <div>
+          <h3>Quote-or-book qualification</h3>
+          <p>Joe pushes every conversation toward a quoted price or a booked on-site visit. Not just lead capture — lead progression.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <span class="num">04</span>
+        <div>
+          <h3>Instant urgent alerts</h3>
+          <p>Gas leaks, flooding, no power — Joe spots them and pings your phone the second she does. Voice calls try to transfer live.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <span class="num">05</span>
+        <div>
+          <h3>Voice-to-SMS handoff</h3>
+          <p>Phone speech recognition gets suburb names wrong. Joe acknowledges on the call, then SMSes the customer for accurate details.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <span class="num">06</span>
+        <div>
+          <h3>One-tap MUTE</h3>
+          <p>Want to take over a customer yourself? Text MUTE and the customer's number. Joe steps back for 24 hours.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <span class="num">07</span>
+        <div>
+          <h3>Full conversation log</h3>
+          <p>Every text and call logged in your own Google Sheet. Read it any time, share with your team, keep forever.</p>
+        </div>
+      </div>
+      <div class="feat">
+        <span class="num">08</span>
+        <div>
+          <h3>Hands-on setup</h3>
+          <p>We onboard you ourselves. Same-day fixes when something needs adjusting. Direct line to the team that built it.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PRICING ============================== -->
+<section id="pricing">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">05 / Pricing</span>
+      <h2>Honest pricing. No lock-in.</h2>
+      <p>Mid-market AU AI receptionists run $300/month or more. We're $150 — half of that, with a quote builder, Xero invoicing, and a direct line to the founder. We're also looking for a small handful of founding tradies who'd help shape the product — at half price, locked in forever.</p>
+    </div>
+
+    <div class="pricing">
+      <div class="price-panel">
+        <h3>Standard</h3>
+        <div class="price-line">
+          <span class="amount">$150</span>
+          <span class="per">/ month</span>
+        </div>
+        <span class="setup">+ $400 once-off setup</span>
+        <ul class="terms">
+          <li>Month-to-month — no lock-in contract</li>
+          <li>Annual option: $1,500/yr (save 2 months)</li>
+          <li>500 customer messages/month included</li>
+          <li>Full feature access from day one</li>
+          <li>Same-day setup</li>
+        </ul>
+      </div>
+
+      <div class="price-panel featured">
+        <h3>Founding Tradie</h3>
+        <div class="price-line">
+          <span class="amount">$75</span>
+          <span class="per">/ month — locked in forever</span>
+        </div>
+        <span class="setup">No setup fee · Xero included free</span>
+        <ul class="terms">
+          <li>Half the standard rate, locked forever</li>
+          <li>Setup fee waived</li>
+          <li><strong>Xero invoicing integration included free for life</strong></li>
+          <li>Two short check-ins in your first month</li>
+          <li>Direct line to the founder</li>
+          <li>Limited spots — small handful only</li>
+        </ul>
+      </div>
+    </div>
+    <p class="fineprint">Prices in AUD. GST not yet applicable.</p>
+
+    <!-- XERO PILOT BONUS CALLOUT -->
+    <div class="extras" style="margin-top:60px;">
+      <div class="extras-head">
+        <h3>Pilot bonus — Xero integration</h3>
+        <p>// Free for founding tradies, locked in for life</p>
+      </div>
+      <div style="background:var(--teal-100); border-radius:12px; padding:32px; color:var(--teal-900);">
+        <p style="font-size:17px; line-height:1.6; margin-bottom:16px;">Connect your Xero account and turn accepted jobs into draft invoices with one tap. Customer contact synced, GST handled, deep link back to Xero. You review and send from Xero — Workbench doesn't auto-send. The moment a customer pays, you get a text.</p>
+        <p style="font-size:15px; opacity:0.85; margin:0;">This is normally a paid add-on. Founding tradies get it included for the life of their account — locked in even when we commercialise it for new customers.</p>
+      </div>
+    </div>
+
+    <!-- OPTIONAL EXTRAS -->
+    <div class="extras">
+      <div class="extras-head">
+        <h3>Optional extras</h3>
+        <p>// Add only if you need them</p>
+      </div>
+
+      <div class="extras-grid">
+        <div class="extra-card">
+          <h4>Zone routing</h4>
+          <div class="who">For tradies covering wide service areas</div>
+          <p>Different booking calendars for different suburbs — e.g., Maleny on Tuesdays, Mooloolaba on Wednesdays. Joe sends each customer to the right calendar based on their suburb.</p>
+          <div class="extra-price">$50 once-off setup · No ongoing fee</div>
+        </div>
+
+        <div class="extra-card">
+          <h4>Travel-aware booking</h4>
+          <div class="who">For tradies doing 5+ jobs a day</div>
+          <p>Joe checks drive time between your existing bookings and any new request before offering slots. Stops back-to-back jobs on opposite ends of the coast.</p>
+          <div class="extra-price">$200 once-off setup · $25/month add-on</div>
+        </div>
+
+        <div class="extra-card pilot">
+          <span class="pilot-badge">Pilot</span>
+          <h4>Quotes &amp; Xero invoicing</h4>
+          <div class="who">Looking for trial tradies</div>
+          <p>Describe a job in plain English — AI drafts the line items. Text your customer a link, they accept with a tap. Accepted quotes become draft invoices in your Xero account with one click. You send from Xero. We text you when the customer pays.</p>
+          <p style="font-style:italic; font-size:13px; color:var(--ink-500); margin-top:-8px;">In active test phase. Working end-to-end with one operator already. Looking for a couple more trial tradies to put it through real-world use.</p>
+          <div class="extra-price">Free during pilot · Trial rate locked forever after launch</div>
+        </div>
+      </div>
+
+      <p class="extras-coda">Zone routing and travel-aware booking: most tradies don't need either. The standard plan handles travel via calendar buffers — start there, add an extra only if your real schedule pain isn't solved by the basics. Quotes &amp; Xero: pilot only, ask us about a trial.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== TRADE TYPES ============================== -->
+<section class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">06 / Who it's for</span>
+      <h2>Built for solo tradies and small crews.</h2>
+    </div>
+
+    <div class="trades">
+      <span class="trade">Plumbers</span>
+      <span class="trade">Electricians</span>
+      <span class="trade">HVAC &amp; air con</span>
+      <span class="trade">Locksmiths</span>
+      <span class="trade">Roofers</span>
+      <span class="trade">Glaziers</span>
+      <span class="trade">Pest control</span>
+      <span class="trade">Tilers</span>
+      <span class="trade">Concreters</span>
+      <span class="trade">Pool techs</span>
+      <span class="trade">Mobile mechanics</span>
+      <span class="trade">Handymen</span>
+      <span class="trade">Cleaners</span>
+      <span class="trade">Solar installers</span>
+      <span class="trade">Fencers</span>
+      <span class="trade">Painters</span>
+      <span class="trade">Landscapers</span>
+      <span class="trade">Carpenters</span>
+    </div>
+    <p class="trade-coda">If your business lives or dies by the phone, Joe pays for herself in a single missed callout.</p>
+  </div>
+</section>
+
+<!-- ============================== FAQ ============================== -->
+<section id="faq">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">07 / FAQ</span>
+      <h2>The honest answers.</h2>
+    </div>
+
+    <div class="faq-list">
+      <details class="faq-item">
+        <summary>Will my customers know it's automated?</summary>
+        <div class="answer">
+          Possibly, yes. Joe is natural and conversational, but she doesn't pretend to be human — and most customers don't care, especially when their text gets answered at 9pm on a Saturday. The alternative is no answer at all.
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary>What if she gets an answer wrong?</summary>
+        <div class="answer">
+          Joe sticks to what's in your profile — your services, prices, hours, what you don't do. She won't invent things. If a customer asks something Joe doesn't know, she says she'll check with you and takes their details. Every conversation is logged in your Google Sheet, so you can see exactly what was said.
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary>What about urgent jobs?</summary>
+        <div class="answer">
+          Joe is trained to spot urgency — gas leaks, flooding, no power, electrical danger, sewer overflows, anything that can't wait. The moment she flags it, you get an SMS with the customer's number, what they said, and what she told them. On phone calls, Joe also tries to transfer the customer to you live, and only falls back to SMS if you don't pick up.
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary>Do I need a new phone number?</summary>
+        <div class="answer">
+          Yes — your service includes a dedicated AU mobile number, set up by us. Use it on your business cards, website, vehicle signage, Google Business listing. If you want to keep your existing number front-of-house, you can forward calls to it. Happy to walk through the options on the setup call.
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary>What happens if I cancel?</summary>
+        <div class="answer">
+          Month-to-month, no lock-in. Cancel any time. Your conversation log stays in your Google Sheet — you keep every customer interaction. We deactivate the number and Joe within 24 hours.
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary>Where is this available?</summary>
+        <div class="answer">
+          Australia-wide. Workbench is based on the Sunshine Coast and supports tradies in every state and territory. Works for any AU mobile or landline.
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== ABOUT ============================== -->
+<section class="about">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow">08 / About</span>
+      <h2>Workbench is a service hub for trades businesses.</h2>
+    </div>
+    <div class="about-body">
+      <p>Based on the Sunshine Coast, supporting tradies across every state in Australia.</p>
+      <p>We build practical, automated tools for the everyday problems trades businesses face — starting with the one that bleeds the most money: missed customer calls and texts.</p>
+      <p><strong>Workbench Reception</strong> is our first product. Joe, our automated receptionist, answers your customer texts and calls 24/7, captures every lead, and pings you the moment something needs your attention. More tools are coming.</p>
+      <p>We're a small team. When you message us, you're talking to the people who built it — not a call centre, not an offshore support queue. If something breaks, we fix it the same day.</p>
+      <p>No upsells. No lock-in. Just the work.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== CTA STRIP ============================== -->
+<section class="cta-strip">
+  <div class="wrap">
+    <h2>Ready to stop missing jobs?</h2>
+    <div class="number">+61 485 050 078</div>
+    <div class="actions">
+      <a href="/start" class="btn btn-primary">Start a pilot →</a>
+      <a href="tel:+61485050078" class="btn btn-secondary cta-call">Or call us</a>
+      <a href="mailto:hello@workbenchhq.org?subject=Workbench%20pilot%20enquiry&body=Hi%20Sacha%2C%0A%0AI%27m%20interested%20in%20a%20Workbench%20pilot.%0A%0AAbout%20my%20business%3A%0A-%20Name%3A%0A-%20Trade%2Ftype%3A%0A-%20Location%3A%0A-%20Mobile%3A%0A%0AThanks%2C" class="btn btn-secondary cta-email">Or email us</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== MOBILE STICKY CTA ============================== -->
+<a href="/start"
+   class="mobile-sticky-cta" id="mobileStickyCta" aria-label="Start a pilot">
+  Start a pilot →
+</a>
+
+<script>
+  // Show sticky CTA on mobile once hero is mostly scrolled past
+  (function() {
+    var sticky = document.getElementById('mobileStickyCta');
+    if (!sticky) return;
+    var hero = document.querySelector('.hero');
+    if (!hero) return;
+    function check() {
+      var rect = hero.getBoundingClientRect();
+      // Show when hero bottom is above viewport (i.e. user has scrolled past)
+      if (rect.bottom < 50) {
+        sticky.classList.add('is-visible');
+      } else {
+        sticky.classList.remove('is-visible');
+      }
+    }
+    window.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    check();
+  })();
+</script>
+
+<!-- ============================== FOOTER ============================== -->
+<footer class="site-footer" id="privacy">
+  <div class="wrap">
+    <div>
+      <a href="#top" class="brand">
+        <span class="slash" style="color:var(--orange);">//</span>
+        <span>Workbench</span>
+      </a>
+      <p style="margin-top:12px; font-family:var(--mono); font-size:12px; color:rgba(250,247,240,0.5); line-height:1.7;">
+        Sunshine Coast, Australia<br>
+        Supporting tradies nationwide.<br>
+        <br>
+        <a href="tel:+61485050078" style="color:var(--amber); text-decoration:none;">+61 485 050 078</a><br>
+        <a href="mailto:hello@workbenchhq.org" style="color:var(--amber); text-decoration:none;">hello@workbenchhq.org</a><br>
+        <a href="https://www.linkedin.com/company/workbenchhq/" target="_blank" rel="noopener" style="color:var(--amber); text-decoration:none;">LinkedIn</a>
+      </p>
+    </div>
+    <div class="privacy">
+      <h4>Data &amp; privacy</h4>
+      <p>We collect what's needed to run the service: your business details, your customers' phone numbers, and the conversations between Joe and your customers.</p>
+      <p>Where we store it: in your own Google Sheet (you control it), plus a short-lived log on our server for support and debugging.</p>
+      <p>What we don't do: we don't sell your data, we don't share with marketers, and we don't use your customer conversations to train AI or machine-learning models.</p>
+      <p>You can delete everything by cancelling — your Sheet stays with you, our copy is removed within 7 days.</p>
+      <p style="font-family:var(--mono); font-size:12px; margin-top:18px;">Full terms and privacy policy available on request.</p>
+    </div>
+    <div class="legal">
+      <span>© 2026 Workbench. All rights reserved.</span>
+      <span>v1.0 · made on the Sunshine Coast</span>
+    </div>
+  </div>
+</footer>
+
+<!-- Cloudflare Web Analytics -->
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "REPLACE_WITH_YOUR_CLOUDFLARE_TOKEN"}'></script>
+<!-- End Cloudflare Web Analytics -->
+
+</body>
+</html>
