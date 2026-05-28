@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0D7377">
+<title>Start a Workbench pilot — Half-price forever, locked in</title>
+<meta name="description" content="Apply for a Workbench founding pilot. Reply within 24 hours from the founder, direct. $75/month locked in for life, setup waived, Xero invoicing included free.">
+<link rel="canonical" href="https://workbenchhq.org/start">
+<meta name="robots" content="noindex, follow">
+<meta property="og:title" content="Start a Workbench pilot">
+<meta property="og:description" content="Apply for a founding pilot. $75/month for life, setup waived, Xero included.">
+<meta property="og:url" content="https://workbenchhq.org/start">
+
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Manrope:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  :root {
+    --teal-900: #0A5A5D;
+    --teal-700: #0D7377;
+    --teal-500: #2A9499;
+    --teal-100: #E0F0F0;
+    --orange:   #E8541C;
+    --orange-dark: #C8470E;
+    --amber:    #F59E0B;
+    --cream:    #FAF7F0;
+    --paper:    #F5F0E6;
+    --ink:      #1A1A1A;
+    --ink-700:  #3A3A3A;
+    --ink-500:  #6B6B6B;
+    --ink-300:  #B0B0B0;
+    --line:     rgba(0,0,0,0.08);
+    --line-strong: rgba(0,0,0,0.18);
+    --red:      #B91C1C;
+    --green:    #15803D;
+
+    --display: 'Bricolage Grotesque', system-ui, sans-serif;
+    --body:    'Manrope', system-ui, sans-serif;
+    --mono:    'DM Mono', ui-monospace, monospace;
+
+    --radius:    8px;
+    --radius-lg: 14px;
+  }
+
+  body {
+    font-family: var(--body);
+    color: var(--ink);
+    background: var(--cream);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--teal-700); }
+  ::selection { background: var(--teal-700); color: var(--cream); }
+
+  /* Header */
+  .topbar {
+    border-bottom: 1px solid var(--line);
+    background: var(--cream);
+    padding: 18px 24px;
+  }
+  .topbar .wrap { max-width: 880px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+  .brand {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--ink);
+    text-decoration: none;
+    letter-spacing: -0.01em;
+  }
+  .brand .slash { color: var(--orange); margin-right: 4px; }
+  .back-link {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-500);
+    text-decoration: none;
+  }
+  .back-link:hover { color: var(--teal-700); }
+
+  /* Page */
+  .page { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+  @media (min-width: 720px) {
+    .page { padding: 64px 24px 96px; }
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--teal-700);
+    margin-bottom: 16px;
+    display: block;
+  }
+  .eyebrow::before { content: "// "; color: var(--orange); font-weight: 700; }
+
+  h1 {
+    font-family: var(--display);
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0 0 16px;
+    color: var(--ink);
+  }
+  @media (min-width: 720px) { h1 { font-size: 48px; } }
+  h1 .accent {
+    background: linear-gradient(180deg, transparent 65%, rgba(245,158,11,0.4) 65%);
+    padding: 0 6px;
+  }
+
+  .lede {
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-700);
+    margin: 0 0 36px;
+    max-width: 580px;
+  }
+
+  /* Promise bar */
+  .promise {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--teal-700);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 36px;
+  }
+  .promise h3 {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--teal-900);
+    margin: 0 0 6px;
+  }
+  .promise p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-700);
+  }
+  .promise ul { margin: 8px 0 0; padding-left: 22px; font-size: 14px; line-height: 1.65; color: var(--ink-700); }
+
+  /* Form */
+  form { margin: 0; }
+  .field { margin-bottom: 20px; }
+  .field label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-700);
+    margin-bottom: 6px;
+  }
+  .field label .req { color: var(--orange); }
+  .field input,
+  .field textarea,
+  .field select {
+    width: 100%;
+    padding: 12px 14px;
+    font-family: var(--body);
+    font-size: 16px;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    transition: border-color 160ms, box-shadow 160ms;
+    -webkit-appearance: none;
+  }
+  .field input:focus,
+  .field textarea:focus,
+  .field select:focus {
+    outline: none;
+    border-color: var(--teal-700);
+    box-shadow: 0 0 0 3px rgba(13,115,119,0.15);
+  }
+  .field textarea { min-height: 88px; resize: vertical; }
+  .field .help {
+    font-size: 13px;
+    color: var(--ink-500);
+    margin-top: 4px;
+  }
+  .field .error {
+    font-size: 13px;
+    color: var(--red);
+    margin-top: 4px;
+    display: none;
+  }
+  .field.has-error input,
+  .field.has-error textarea,
+  .field.has-error select { border-color: var(--red); }
+  .field.has-error .error { display: block; }
+
+  /* Honeypot — hidden from humans, visible to bots */
+  .hp {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
+  /* Submit */
+  .submit-row {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  @media (min-width: 540px) {
+    .submit-row { flex-direction: row; align-items: center; }
+  }
+  .submit-btn {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--orange);
+    border: 2px solid var(--orange);
+    border-radius: 100px;
+    padding: 14px 28px;
+    cursor: pointer;
+    transition: background 160ms, transform 160ms, box-shadow 160ms;
+    box-shadow: 0 4px 12px rgba(232,84,28,0.25);
+  }
+  .submit-btn:hover:not(:disabled) {
+    background: var(--orange-dark);
+    border-color: var(--orange-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(232,84,28,0.35);
+  }
+  .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .submit-note {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-500);
+  }
+
+  /* Status messages */
+  .status {
+    padding: 14px 18px;
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+    font-size: 15px;
+    display: none;
+  }
+  .status.is-shown { display: block; }
+  .status.success {
+    background: rgba(21,128,61,0.08);
+    border-left: 4px solid var(--green);
+    color: var(--green);
+  }
+  .status.error {
+    background: rgba(185,28,28,0.08);
+    border-left: 4px solid var(--red);
+    color: var(--red);
+  }
+
+  /* Footer */
+  .foot {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-500);
+    line-height: 1.7;
+  }
+  .foot a { color: var(--ink-500); text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a href="/" class="brand"><span class="slash">//</span>Workbench</a>
+    <a href="/" class="back-link">&larr; back to site</a>
+  </div>
+</header>
+
+<main class="page">
+  <span class="eyebrow">Founding pilot</span>
+  <h1>Start a <span class="accent">Workbench pilot</span>.</h1>
+  <p class="lede">
+    Tell us about your business. The founder will text you back within 24 hours, personally.
+    Founding pilot rate is $75/month, locked in for life, setup waived, Xero invoicing included free.
+  </p>
+
+  <div class="promise">
+    <h3>What happens after you submit</h3>
+    <ul>
+      <li>Joe will send you a confirmation text within a minute.</li>
+      <li>Sacha (the founder) will text you back within 24 hours to chat through fit.</li>
+      <li>No spam, no autodialer, no third party. Your details land in our spreadsheet and your phone.</li>
+    </ul>
+  </div>
+
+  <div id="status" class="status" role="alert"></div>
+
+  <form id="leadForm" novalidate>
+    <div class="field" id="f_name">
+      <label for="name">Your name <span class="req">*</span></label>
+      <input type="text" id="name" name="name" autocomplete="name" required maxlength="120">
+      <div class="error">Please enter your name.</div>
+    </div>
+
+    <div class="field" id="f_mobile">
+      <label for="mobile">Mobile <span class="req">*</span></label>
+      <input type="tel" id="mobile" name="mobile" inputmode="tel" autocomplete="tel" required maxlength="32" placeholder="e.g. 0402 585 413">
+      <div class="help">Australian mobile. We text you a confirmation straight after you submit.</div>
+      <div class="error">Please enter a valid Australian mobile.</div>
+    </div>
+
+    <div class="field" id="f_email">
+      <label for="email">Email <span style="color:var(--ink-500); font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span></label>
+      <input type="email" id="email" name="email" autocomplete="email" maxlength="160" placeholder="you@example.com">
+      <div class="help">If you prefer email follow-up. We'll still text the confirmation.</div>
+      <div class="error">Please enter a valid email address.</div>
+    </div>
+
+    <div class="field" id="f_business">
+      <label for="business">Business name <span class="req">*</span></label>
+      <input type="text" id="business" name="business" autocomplete="organization" required maxlength="160">
+      <div class="error">Please enter your business name.</div>
+    </div>
+
+    <div class="field" id="f_trade">
+      <label for="trade">What do you do? <span class="req">*</span></label>
+      <input type="text" id="trade" name="trade" required maxlength="120" placeholder="e.g. plumber, sparky, food truck, mechanic">
+      <div class="error">Please tell us your trade or business type.</div>
+    </div>
+
+    <div class="field" id="f_location">
+      <label for="location">Where are you based? <span style="color:var(--ink-500); font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span></label>
+      <input type="text" id="location" name="location" autocomplete="address-level2" maxlength="160" placeholder="e.g. Sunshine Coast QLD">
+    </div>
+
+    <div class="field" id="f_notes">
+      <label for="notes">Anything else we should know? <span style="color:var(--ink-500); font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span></label>
+      <textarea id="notes" name="notes" maxlength="1000" placeholder="e.g. I miss 5+ calls a day, want help with quotes, or just curious."></textarea>
+    </div>
+
+    <!-- Honeypot — bots love these, humans don't see them -->
+    <div class="hp" aria-hidden="true">
+      <label for="hp_company">Company (leave blank)</label>
+      <input type="text" id="hp_company" name="hp_company" tabindex="-1" autocomplete="off">
+    </div>
+
+    <input type="hidden" name="source" value="website-start-form">
+
+    <div class="submit-row">
+      <button type="submit" class="submit-btn" id="submitBtn">Send to Sacha →</button>
+      <span class="submit-note">No spam. No third party. Founder direct.</span>
+    </div>
+  </form>
+
+  <div class="foot">
+    Workbench  &middot;  ABN 13 749 675 215  &middot;  Sunshine Coast<br>
+    <a href="/">workbenchhq.org</a>  &middot;  <a href="mailto:hello@workbenchhq.org">hello@workbenchhq.org</a>  &middot;  <a href="tel:+61485050078">+61 485 050 078</a>
+  </div>
+</main>
+
+<script>
+  (function() {
+    var API_URL = "https://tradie-reception.onrender.com/api/lead";
+    var form   = document.getElementById("leadForm");
+    var btn    = document.getElementById("submitBtn");
+    var status = document.getElementById("status");
+
+    function showStatus(kind, msg) {
+      status.className = "status is-shown " + kind;
+      status.textContent = msg;
+      status.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function clearFieldErrors() {
+      document.querySelectorAll(".field.has-error").forEach(function(f) {
+        f.classList.remove("has-error");
+      });
+    }
+
+    function markError(id) {
+      var f = document.getElementById(id);
+      if (f) f.classList.add("has-error");
+    }
+
+    // Normalise common AU mobile formats for client-side validation.
+    function isValidAuMobile(raw) {
+      var v = (raw || "").replace(/[\s\-\(\)]/g, "");
+      // Accept 04xxxxxxxx, +614xxxxxxxx, or 614xxxxxxxx
+      if (/^04\d{8}$/.test(v)) return true;
+      if (/^\+614\d{8}$/.test(v)) return true;
+      if (/^614\d{8}$/.test(v)) return true;
+      return false;
+    }
+
+    form.addEventListener("submit", function(e) {
+      e.preventDefault();
+      clearFieldErrors();
+
+      // Validate
+      var name     = document.getElementById("name").value.trim();
+      var mobile   = document.getElementById("mobile").value.trim();
+      var email    = document.getElementById("email").value.trim();
+      var business = document.getElementById("business").value.trim();
+      var trade    = document.getElementById("trade").value.trim();
+
+      var firstError = null;
+      if (!name)     { markError("f_name");     firstError = firstError || "f_name"; }
+      if (!isValidAuMobile(mobile)) { markError("f_mobile"); firstError = firstError || "f_mobile"; }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        markError("f_email"); firstError = firstError || "f_email";
+      }
+      if (!business) { markError("f_business"); firstError = firstError || "f_business"; }
+      if (!trade)    { markError("f_trade");    firstError = firstError || "f_trade"; }
+
+      if (firstError) {
+        var el = document.querySelector("#" + firstError + " input, #" + firstError + " textarea");
+        if (el) el.focus();
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Sending...";
+
+      var fd = new FormData(form);
+
+      fetch(API_URL, {
+        method: "POST",
+        body: fd
+      }).then(function(res) {
+        return res.json().then(function(data) {
+          return { ok: res.ok, status: res.status, data: data };
+        }).catch(function() {
+          return { ok: res.ok, status: res.status, data: {} };
+        });
+      }).then(function(r) {
+        if (r.ok) {
+          // Redirect to thanks page
+          window.location.href = "/thanks";
+        } else if (r.status === 429) {
+          showStatus("error", "We've had a lot of submissions from your location. Try again in an hour, or text us directly on +61 485 050 078.");
+          btn.disabled = false;
+          btn.textContent = "Send to Sacha →";
+        } else {
+          var msg = (r.data && r.data.error) || "Something went wrong. Please try again, or text us on +61 485 050 078.";
+          showStatus("error", msg);
+          btn.disabled = false;
+          btn.textContent = "Send to Sacha →";
+        }
+      }).catch(function() {
+        showStatus("error", "We couldn't reach our server. Text us instead on +61 485 050 078 and we'll get you sorted.");
+        btn.disabled = false;
+        btn.textContent = "Send to Sacha →";
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>
