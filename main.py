@@ -452,7 +452,7 @@ except Exception as exc:
 # ===========================================================================
 
 def _normalise_phone(value) -> str:
-    s = str(value).strip()
+    s = str(value).strip().lstrip("'")  # strip gspread apostrophe prefix
     if s and not s.startswith("+") and s.isdigit():
         s = "+" + s
     return s
