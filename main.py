@@ -169,7 +169,7 @@ LEADS_HEADERS = [
 ]
 LEAD_NOTIFY_NUMBER = os.environ.get("LEAD_NOTIFY_NUMBER", "+61402585413")
 LEAD_FROM_NUMBER = os.environ.get("LEAD_FROM_NUMBER", "+61485050078")
-ALLOWED_LEAD_ORIGINS = {"https://workbenchhq.org", "https://www.workbenchhq.org"}
+ALLOWED_LEAD_ORIGINS = {"https://workbenchhq.com.au", "https://www.workbenchhq.com.au", "https://workbenchhq.org", "https://www.workbenchhq.org"}
 
 # Xero API
 XERO_CLIENT_ID = os.environ.get("XERO_CLIENT_ID", "")
