@@ -24,7 +24,7 @@ import requests
 from anthropic import Anthropic
 from flask import (
     Flask, request, Response, render_template, redirect, url_for,
-    session, flash, abort,
+    session, flash, abort, jsonify,
 )
 from google.oauth2.service_account import Credentials
 from twilio.rest import Client as TwilioClient
@@ -2756,6 +2756,27 @@ def _lead_rate_limited(ip: str) -> bool:
         return False
 
 
+def _normalise_au_mobile(raw: str) -> str:
+    """Convert the AU mobile formats the /start form accepts into E.164.
+
+    Accepts 0412345678, 0412 345 678, (04) 1234-5678, 61412345678 and
+    +61412345678. Returns "" if the input is not a plausible AU mobile.
+    """
+    v = "".join(ch for ch in str(raw or "") if ch.isdigit() or ch == "+")
+    v = v.lstrip("'")
+    if v.startswith("+61"):
+        digits = v[3:]
+    elif v.startswith("61") and len(v) == 11:
+        digits = v[2:]
+    elif v.startswith("0"):
+        digits = v[1:]
+    else:
+        digits = v
+    if len(digits) == 9 and digits.startswith("4") and digits.isdigit():
+        return "+61" + digits
+    return ""
+
+
 def _cors_origin(request_obj) -> Optional[str]:
     """Return the request Origin if it's allowed, otherwise None."""
     origin = request_obj.headers.get("Origin", "")
@@ -2806,6 +2827,28 @@ def _format_lead_auto_reply(name: str) -> str:
     )
 
 
+@app.errorhandler(500)
+@app.errorhandler(Exception)
+def _handle_unexpected_error(exc):
+    """Never let /api/lead answer with a bare HTML 500.
+
+    Flask's default error page carries no CORS header, so the browser's fetch()
+    rejects and the form shows "we couldn't reach our server" instead of a real
+    message. Anything unexpected on the lead endpoint becomes JSON + CORS.
+    """
+    from werkzeug.exceptions import HTTPException
+
+    if isinstance(exc, HTTPException) and exc.code != 500:
+        return exc
+
+    log.exception("Unhandled error on %s: %s", request.path, exc)
+    if request.path == "/api/lead":
+        cors = _cors_headers(_cors_origin(request))
+        return jsonify({"error": "Something went wrong on our side. "
+                                 "Text us on +61 485 050 078 and we'll sort you out."}), 500, cors
+    return Response("Internal Server Error", status=500)
+
+
 @app.route("/api/lead", methods=["POST", "OPTIONS"])
 def api_lead():
     """Public endpoint for the workbenchhq.org/start signup form."""
@@ -2844,7 +2887,7 @@ def api_lead():
     if not name or not mobile_raw or not business or not trade:
         return jsonify({"error": "Missing required fields"}), 400, cors
 
-    mobile = _normalise_phone(mobile_raw)
+    mobile = _normalise_au_mobile(mobile_raw)
     if not mobile.startswith("+61") or len(mobile) < 11:
         return jsonify({"error": "Please enter a valid Australian mobile."}), 400, cors
 
