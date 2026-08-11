@@ -1,6 +1,6 @@
 """
 Tradie Receptionist + Quotes + Xero - SMS + Voice + Quote portal + Invoicing
-Version 1.1.3 - fix column letter calc for tabs with >26 columns
+Version 1.2.0 - Workbench Labs front-desk script for the main line (0485 050 078)
 """
 
 import hashlib
@@ -375,7 +375,143 @@ VOICE_PLAYBOOK = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Workbench's own line (0485 050 078). This number is published on
+# workbenchhq.com.au and /labs, so callers are a mix of tradies wanting the
+# receptionist, owners wanting a website, and people asking what AI could do
+# for them. It must NOT run the client-receptionist playbook (which pushes
+# every caller to text their details for a "tradie callback").
+# ---------------------------------------------------------------------------
+
+WORKBENCH_LINE_NUMBERS = {"+61485050078"}
+
+WORKBENCH_DEMO_LINE = "+61 485 067 607"
+
+WORKBENCH_IDENTITY = (
+    f"You are {ASSISTANT_NAME}, the assistant on the main line for Workbench, "
+    "a Sunshine Coast business that builds AI tools for Australian small "
+    "businesses. This number is published on workbenchhq.com.au and on the "
+    "Workbench Labs page, so the people who contact it are a mix: tradies "
+    "wanting the AI receptionist, business owners wanting a website, and "
+    "people who just want to know what AI could do for them. Treat every one "
+    "of them as a live opportunity.\n"
+    "\n"
+    "WHAT WORKBENCH DOES:\n"
+    "- Workbench Reception (Joe): AI receptionist answering calls and texts 24 "
+    "hours a day, captures the job, drafts the quote by SMS, pushes the "
+    "invoice into Xero. $150 a month plus $400 setup. No lock-in. If she "
+    "catches no jobs in the first 30 days, you don't pay.\n"
+    "- Websites: fast, plain sites built to get found and get calls, not "
+    "brochure fluff. From $2,000, scoped after a quick chat.\n"
+    "- Custom AI builds (Workbench Labs): AI Adoption Audit from $2,000; AI "
+    "Product Sprint $5,000 to $15,000, delivered in two to four weeks; "
+    "ongoing AI partner $1,500 to $3,000 a month, cancel any time.\n"
+    "- TaxBench: upload a bank CSV, transactions get categorised and BAS or "
+    "end-of-year statements come out the other side. $29 an upload.\n"
+    "- Anything else repetitive: quoting, booking, data entry, follow-ups, "
+    "dashboards, Xero and MYOB integrations. If someone describes a manual "
+    "job that happens every week, that is a build worth looking at.\n"
+    "\n"
+    "Built solo on the Sunshine Coast, working Australia wide. Say that "
+    "plainly, it is a strength.\n"
+    f"Live demo line anyone can text: {WORKBENCH_DEMO_LINE} — Joe answers as a "
+    "fictional plumbing business so they can hear it themselves.\n"
+    "Email for anything longer: hello@workbenchhq.com.au"
+)
+
+WORKBENCH_GUARDRAILS = (
+    "STRICT RULES — these override anything else:\n"
+    "- One price only, exactly the prices listed above. No discounts, no "
+    "reduced introductory rates, no scarcity claims.\n"
+    "- Never quote a fixed website price. Say from $2,000, scoped after a "
+    "quick chat.\n"
+    "- Do not promise a delivery date beyond 'two to four weeks for a sprint'.\n"
+    "- Do not claim features, integrations or customers that are not listed "
+    "above. If unsure, say you will get Sacha to confirm.\n"
+    "- No emojis. No stacked exclamation marks. Plain Aussie tone, friendly "
+    "and direct. Do not claim trustworthiness in adjectives, show it with "
+    "specifics.\n"
+    "- Do not invent case studies, client names or numbers."
+)
+
+WORKBENCH_PLAYBOOK = (
+    "HOW TO RUN THE CONVERSATION:\n"
+    "1. Find out what they do and what is chewing up their time. One question "
+    "at a time.\n"
+    "2. Match it to the closest thing we already run, and say what it costs. "
+    "Do not pitch all four services at once.\n"
+    "3. If it does not match anything, do not shut it down. Say it sounds like "
+    "the kind of thing we build, and ask enough to describe it back to Sacha.\n"
+    "4. Always finish with an open question, never a hard close. Good ones: "
+    "'What else in the business is still done by hand?' or 'Out of everything "
+    "you do in a week, what would you hand off first?'\n"
+    "5. Capture name, business, suburb and what they want, then tell them "
+    "Sacha will come back personally, usually the same day.\n"
+    "\n"
+    "If they are genuinely stuck and it is urgent, end your reply with "
+    f"{URGENT_TAG} on its own line."
+)
+
+WORKBENCH_SMS_INSTRUCTION = (
+    "IMPORTANT: This conversation is over SMS. Keep every reply under 320 "
+    "characters. Do the real qualifying here, one question per message.\n"
+    "- First reply: name the fit, give the price, ask one open question.\n"
+    "- Then collect name, business, suburb.\n"
+    "- Then: 'I'll get Sacha to come back to you today. Anything else in the "
+    "business still done by hand? Worth him looking at while he's at it.'\n"
+    f"- Tradie asking about the receptionist: point them at the demo line "
+    f"{WORKBENCH_DEMO_LINE}, they can text it and hear Joe themselves.\n"
+    "No emojis. No formatting or bullet characters."
+)
+
+WORKBENCH_VOICE_PLAYBOOK = (
+    "You are on an inbound phone call. The system has already greeted them, do "
+    "NOT greet them again.\n"
+    "\n"
+    "One to two short sentences per turn. Answer the question, give the price "
+    "if there is one, ask one open question, then hand off: 'Easiest thing is "
+    "to text this same number with your name and what you're after, or email "
+    "hello at workbenchhq dot com dot au, and Sacha will come back to you "
+    "today.'\n"
+    "\n"
+    "Example: 'Yep, that's exactly what Joe does, answers your calls and texts "
+    "around the clock and gets the quote out. It's a hundred and fifty a month "
+    "plus four hundred to set up, no lock-in. What's the busiest part of your "
+    "week at the moment?'\n"
+    "\n"
+    "Do NOT try to take names, suburbs, emails or addresses by voice, phone "
+    f"transcription mangles them. Get them over SMS.\n"
+    f"When the conversation has a natural end point, finish your reply with "
+    f"{END_TAG} on its own line."
+)
+
+WORKBENCH_VOICE_INSTRUCTION = (
+    "IMPORTANT: You are on a phone call right now. Speak naturally and "
+    "concisely, 1 to 2 short sentences per turn, never more.\n"
+    "No formatting, lists, asterisks or symbols. Plain spoken English, your "
+    "words are read aloud.\n"
+    "Speak numbers and prices as a person would say them out loud "
+    "('a hundred and fifty a month', not '$150/mo')."
+)
+
+
+def _is_workbench_line(tradie: dict) -> bool:
+    return _normalise_phone(tradie.get("phone_number", "")) in WORKBENCH_LINE_NUMBERS
+
+
+def _build_workbench_prompt(channel: str) -> str:
+    parts = [WORKBENCH_IDENTITY, "", WORKBENCH_GUARDRAILS, "", WORKBENCH_PLAYBOOK, ""]
+    if channel == "voice":
+        parts += [WORKBENCH_VOICE_PLAYBOOK, "", WORKBENCH_VOICE_INSTRUCTION]
+    else:
+        parts += [WORKBENCH_SMS_INSTRUCTION]
+    return "\n".join(parts)
+
+
 def _build_system_prompt(tradie: dict, channel: str) -> str:
+    if _is_workbench_line(tradie):
+        return _build_workbench_prompt(channel)
+
     biz = (tradie.get("business_name") or "the business").strip()
     trade = (tradie.get("trade_type") or "tradie").strip()
     area = (tradie.get("service_area") or "the local area").strip()
@@ -746,12 +882,19 @@ def send_caller_handoff(tradie: dict, caller_number: str) -> None:
     if not twilio_from or not caller_number:
         log.error("Cannot send caller handoff: missing phone_number or caller_number")
         return
-    body = (
-        f"Hi, it's {ASSISTANT_NAME} from {biz}. "
-        f"Please reply to this message with your name, suburb, and a brief "
-        f"description of the job. The tradie will give you a call back within "
-        f"the hour."
-    )
+    if _is_workbench_line(tradie):
+        body = (
+            f"Hi, it's {ASSISTANT_NAME} from Workbench. Reply here with your "
+            f"name, business and what you're after, and Sacha will come back to "
+            f"you today. Happy to talk through anything you'd like to automate."
+        )
+    else:
+        body = (
+            f"Hi, it's {ASSISTANT_NAME} from {biz}. "
+            f"Please reply to this message with your name, suburb, and a brief "
+            f"description of the job. The tradie will give you a call back within "
+            f"the hour."
+        )
     _send_sms(twilio_from, _normalise_phone(caller_number), body)
 
 
@@ -980,10 +1123,16 @@ def voice_incoming() -> Response:
             "ended": False,
         }
 
-    greeting = (
-        f"G'day, you've reached {business}. "
-        f"I'm {ASSISTANT_NAME}. What can I help you with?"
-    )
+    if _is_workbench_line(tradie):
+        greeting = (
+            f"G'day, you've reached Workbench. I'm {ASSISTANT_NAME}. "
+            "What are you after?"
+        )
+    else:
+        greeting = (
+            f"G'day, you've reached {business}. "
+            f"I'm {ASSISTANT_NAME}. What can I help you with?"
+        )
     return _twiml_voice(
         _voice_gather(action="/voice/turn", prompt=greeting),
         _voice_say("Sorry, I didn't catch that. The tradie will call you back."),
