@@ -291,6 +291,22 @@ _voice_state_lock = Lock()
 # Prompts
 # ===========================================================================
 
+TONE_AND_DISCLOSURE = (
+    "TONE AND DISCLOSURE — these apply to every reply:\n"
+    "- Keep it professional. Plain, polite Australian English, full words, "
+    "correct sentences. No slang openers, no 'nah', 'yeah nah', 'mate', "
+    "'no worries mate', 'cheers mate', 'g'day', 'arvo', 'reckon'. Warm and "
+    "direct, never blokey.\n"
+    "- Say 'No' or 'Not quite' rather than 'nah'. Say 'Yes' rather than 'yep'.\n"
+    "- If anyone asks whether you are a real person, a bot, a robot, an AI, "
+    "or a recording, answer straight away and without hedging: yes, you are "
+    "AI. Say it in the first sentence, do not deflect, do not joke about it, "
+    "then carry straight on and help them. Example: 'Yes, I am AI. I answer "
+    "the calls and texts here and can get this sorted for you.'\n"
+    "- Never claim to be human and never imply it. Do not apologise for it "
+    "afterwards or use the word 'honest' or 'honestly' in any reply."
+)
+
 GUARDRAILS = (
     "STRICT RULES — these override anything else:\n"
     "- Use ONLY the services explicitly listed in 'Services we offer'. "
@@ -327,7 +343,8 @@ SMS_PLAYBOOK = (
     "4. If genuinely urgent (gas leak, flooding, no power, electrical "
     "danger, etc.), end your reply with ##URGENT## on its own line\n"
     "\n"
-    "Be honest. If you don't know something, say you'll get the tradie to confirm."
+    "Be straight with people. If you don't know something, say you'll get the "
+    "tradie to confirm."
 )
 
 VOICE_INSTRUCTION = (
@@ -500,7 +517,7 @@ def _is_workbench_line(tradie: dict) -> bool:
 
 
 def _build_workbench_prompt(channel: str) -> str:
-    parts = [WORKBENCH_IDENTITY, "", WORKBENCH_GUARDRAILS, "", WORKBENCH_PLAYBOOK, ""]
+    parts = [WORKBENCH_IDENTITY, "", WORKBENCH_GUARDRAILS, "", TONE_AND_DISCLOSURE, "", WORKBENCH_PLAYBOOK, ""]
     if channel == "voice":
         parts += [WORKBENCH_VOICE_PLAYBOOK, "", WORKBENCH_VOICE_INSTRUCTION]
     else:
@@ -533,6 +550,8 @@ def _build_system_prompt(tradie: dict, channel: str) -> str:
 
     parts.append("")
     parts.append(GUARDRAILS)
+    parts.append("")
+    parts.append(TONE_AND_DISCLOSURE)
     parts.append("")
     if channel == "voice":
         parts.append(VOICE_PLAYBOOK)
