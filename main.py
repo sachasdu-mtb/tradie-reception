@@ -2915,7 +2915,7 @@ def xero_webhook():
 
 # Simple in-memory rate limiter for the public form. Survives only between
 # Render restarts but that's fine — purpose is to slow down a script not to
-# build a fortress. Keyed by IP. Allows 3 submissions per hour per IP.
+# build a fortress. Keyed by IP. Allows 10 submissions per hour per IP.
 _lead_rate: dict[str, list[float]] = {}
 _lead_rate_lock = Lock()
 
@@ -2924,7 +2924,7 @@ def _lead_rate_limited(ip: str) -> bool:
         return False
     now = time.time()
     window = 3600  # 1 hour
-    limit = 3
+    limit = 10  # was 3, which locked out anyone who mistyped their number twice
     with _lead_rate_lock:
         history = [t for t in _lead_rate.get(ip, []) if now - t < window]
         if len(history) >= limit:
@@ -2935,25 +2935,45 @@ def _lead_rate_limited(ip: str) -> bool:
         return False
 
 
-def _normalise_au_mobile(raw: str) -> str:
-    """Convert the AU mobile formats the /start form accepts into E.164.
+def _normalise_au_phone(raw: str) -> tuple[str, str]:
+    """Normalise an AU phone number to E.164 and say what kind it is.
 
-    Accepts 0412345678, 0412 345 678, (04) 1234-5678, 61412345678 and
-    +61412345678. Returns "" if the input is not a plausible AU mobile.
+    Returns (e164, kind) where kind is "mobile", "landline", "freecall" or ""
+    if the number is not plausible. Landlines and 13/1300/1800 numbers are
+    accepted on purpose: plenty of tradies run a fixed line as their main
+    number and refusing them loses a real lead. Only the auto-reply SMS and
+    texting depend on it being a mobile.
     """
     v = "".join(ch for ch in str(raw or "") if ch.isdigit() or ch == "+")
     v = v.lstrip("'")
     if v.startswith("+61"):
         digits = v[3:]
-    elif v.startswith("61") and len(v) == 11:
+    elif v.startswith("61") and len(v) in (11, 12):
         digits = v[2:]
     elif v.startswith("0"):
         digits = v[1:]
     else:
         digits = v
-    if len(digits) == 9 and digits.startswith("4") and digits.isdigit():
-        return "+61" + digits
-    return ""
+    if not digits.isdigit():
+        return "", ""
+    # Mobile: 4xx xxx xxx
+    if len(digits) == 9 and digits[0] == "4":
+        return "+61" + digits, "mobile"
+    # Landline: area code 2, 3, 7 or 8 then 8 digits
+    if len(digits) == 9 and digits[0] in "2378":
+        return "+61" + digits, "landline"
+    # 1300 / 1800 (10 digits) and 13xxxx (6 digits), dialled without a 0
+    if len(digits) == 10 and digits.startswith(("1300", "1800")):
+        return "+61" + digits, "freecall"
+    if len(digits) == 6 and digits.startswith("13"):
+        return "+61" + digits, "freecall"
+    return "", ""
+
+
+def _normalise_au_mobile(raw: str) -> str:
+    """Back-compat wrapper: E.164 only when the number is a real mobile."""
+    e164, kind = _normalise_au_phone(raw)
+    return e164 if kind == "mobile" else ""
 
 
 def _cors_origin(request_obj) -> Optional[str]:
@@ -2978,11 +2998,16 @@ def _cors_headers(origin: Optional[str]) -> dict:
 
 def _format_lead_notify_sms(name: str, mobile: str, email: str,
                             business: str, trade: str, location: str,
-                            notes: str, lead_id: str) -> str:
+                            notes: str, lead_id: str,
+                            phone_kind: str = "mobile") -> str:
+    if phone_kind == "mobile":
+        phone_line = f"Mobile: {mobile}"
+    else:
+        phone_line = f"Phone: {mobile} ({phone_kind.upper()} - call, cannot text)"
     lines = [
         f"NEW LEAD — {trade}",
         f"{name} at {business}",
-        f"Mobile: {mobile}",
+        phone_line,
     ]
     if email:
         lines.append(f"Email: {email}")
@@ -3063,25 +3088,46 @@ def api_lead():
     notes = (request.form.get("notes") or "").strip()[:1000]
     source = (request.form.get("source") or "website-form").strip()[:60]
 
-    if not name or not mobile_raw or not business or not trade:
-        return jsonify({"error": "Missing required fields"}), 400, cors
+    def _reject(message: str, reason: str):
+        """Log the whole payload before refusing, so a rejected lead is still
+        a contactable lead. Previously a 400 left no trace anywhere."""
+        log.warning(
+            "api_lead: REJECTED (%s) ip=%s name=%r mobile=%r email=%r "
+            "business=%r trade=%r location=%r notes=%r source=%r",
+            reason, ip, name, mobile_raw, email, business, trade,
+            location, notes[:200], source,
+        )
+        return jsonify({"error": message}), 400, cors
 
-    mobile = _normalise_au_mobile(mobile_raw)
-    if not mobile.startswith("+61") or len(mobile) < 11:
-        return jsonify({"error": "Please enter a valid Australian mobile."}), 400, cors
+    if not name or not mobile_raw or not business or not trade:
+        return _reject("Missing required fields", "missing_fields")
+
+    phone, phone_kind = _normalise_au_phone(mobile_raw)
+    if not phone:
+        return _reject(
+            "That number does not look complete. Mobile or landline is fine, "
+            "just include the area code.",
+            "unparseable_phone",
+        )
+    mobile = phone
 
     # Light email shape check (only if provided)
     if email and ("@" not in email or "." not in email.split("@")[-1]):
-        return jsonify({"error": "Please enter a valid email address."}), 400, cors
+        return _reject("Please enter a valid email address.", "bad_email")
 
     # Write to Sheet
     lead_id = uuid.uuid4().hex
     created_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     ua = (request.headers.get("User-Agent") or "")[:240]
+    sheet_notes = notes
+    if phone_kind != "mobile":
+        # Make it obvious in the sheet that this one has to be phoned, not texted.
+        flag = "[%s - CALL, cannot text]" % phone_kind.upper()
+        sheet_notes = (flag + " " + notes).strip()
     row = [
         lead_id, created_at, source,
         name, mobile, email, business, trade, location,
-        notes, "new", "", "",
+        sheet_notes, "new", "", "",
         ua, ip,
     ]
     leads_tab = _ensure_tab(LEADS_TAB, LEADS_HEADERS)
@@ -3098,15 +3144,20 @@ def api_lead():
     # Notify Sacha via SMS
     try:
         notify_body = _format_lead_notify_sms(name, mobile, email, business, trade,
-                                              location, notes, lead_id)
+                                              location, notes, lead_id,
+                                              phone_kind=phone_kind)
         _send_sms(LEAD_FROM_NUMBER, LEAD_NOTIFY_NUMBER, notify_body)
     except Exception as exc:
         log.exception("api_lead: failed to notify owner: %s", exc)
         # Don't fail the request — the lead is in the Sheet
 
-    # Auto-reply to prospect
+    # Auto-reply to prospect (only mobiles can receive an SMS)
     try:
-        _send_sms(LEAD_FROM_NUMBER, mobile, _format_lead_auto_reply(name))
+        if phone_kind == "mobile":
+            _send_sms(LEAD_FROM_NUMBER, mobile, _format_lead_auto_reply(name))
+        else:
+            log.info("api_lead: %s is a %s, skipping auto-reply SMS",
+                     lead_id[:8], phone_kind)
     except Exception as exc:
         log.exception("api_lead: failed to send auto-reply: %s", exc)
         # Don't fail the request — Sacha will follow up manually
