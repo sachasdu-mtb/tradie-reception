@@ -67,6 +67,20 @@ def main_tests():
     for raw in ["0212345678", "abc", "", "0402585"]:
         results.append(check(f"reject {raw!r}", norm(raw) == ""))
 
+    # Landlines and 13/1300/1800 numbers must be accepted as leads, flagged
+    # as not-textable rather than refused (a refused lead leaves no trace).
+    phone = main._normalise_au_phone
+    for raw, want in [
+        ("0402585413", ("+61402585413", "mobile")),
+        ("07 3123 4567", ("+61731234567", "landline")),
+        ("(02) 9123-4567", ("+61291234567", "landline")),
+        ("1300 123 456", ("+611300123456", "freecall")),
+        ("13 11 66", ("+61131166", "freecall")),
+        ("abc", ("", "")),
+        ("123", ("", "")),
+    ]:
+        results.append(check(f"phone {raw!r}", phone(raw) == want))
+
     print(f"\n{sum(results)}/{len(results)} checks passed")
     return 0 if all(results) else 1
 
