@@ -59,6 +59,22 @@ CONVERSATION_LOG_HEADERS = [
 MUTES_TAB = "Mutes"
 MUTES_HEADERS = ["timestamp", "business_name", "customer_number", "expires_at"]
 
+# SMS opt-outs (Spam Act 2003: honour STOP on every line, stop all texts to
+# that number from that line). One row per event; latest row per pair wins.
+OPT_OUTS_TAB = "Opt Outs"
+OPT_OUTS_HEADERS = ["timestamp", "line_number", "customer_number", "status", "message"]
+OPT_OUT_KEYWORDS = {"STOP", "STOPALL", "STOP ALL", "UNSUBSCRIBE", "END", "QUIT",
+                    "OPTOUT", "OPT OUT", "OPT-OUT", "REMOVE", "STOP TEXTING"}
+OPT_IN_KEYWORDS = {"START", "UNSTOP", "SUBSCRIBE"}
+# Opt-outs received before this handler existed. Treated as opted out unless a
+# later "opted_in" row exists in the Opt Outs tab.
+KNOWN_OPT_OUTS = {
+    ("+61485050078", "+61457292901"),  # texted "Stop" 2026-09-24
+}
+OPT_OUT_CONFIRMATION = ("You're unsubscribed and won't get any more texts from this "
+                        "number. Reply START to opt back in.")
+OPT_IN_CONFIRMATION = "You're opted back in. Reply STOP at any time to unsubscribe."
+
 URGENT_TAG = "##URGENT##"
 END_TAG = "##END##"
 MUTE_HOURS = 24
@@ -859,6 +875,63 @@ def handle_tradie_command(tradie: dict, command_body: str) -> str:
 
 
 # ===========================================================================
+# SMS opt-outs
+# ===========================================================================
+
+def _keyword(body: str) -> str:
+    """Normalise an inbound body for exact keyword matching ("Stop." -> "STOP")."""
+    return " ".join(str(body).strip().upper().strip(".!?,").split())
+
+
+def is_opt_out_keyword(body: str) -> bool:
+    return _keyword(body) in OPT_OUT_KEYWORDS
+
+
+def is_opt_in_keyword(body: str) -> bool:
+    return _keyword(body) in OPT_IN_KEYWORDS
+
+
+def record_opt_status(line_number: str, customer_number: str, status: str, message: str) -> bool:
+    tab = _ensure_tab(OPT_OUTS_TAB, OPT_OUTS_HEADERS)
+    if tab is None:
+        log.error("Opt Outs tab unavailable; could not record %s for %s", status, customer_number)
+        return False
+    try:
+        tab.append_row(
+            [datetime.now(timezone.utc).isoformat(timespec="seconds"),
+             _normalise_phone(line_number), _normalise_phone(customer_number),
+             status, message[:200]],
+            value_input_option="RAW",
+        )
+        log.info("Opt status %s recorded: line=%s customer=%s", status, line_number, customer_number)
+        return True
+    except Exception as exc:
+        log.exception("Failed to record opt status: %s", exc)
+        return False
+
+
+def is_opted_out(line_number: str, customer_number: str) -> bool:
+    """True if the latest opt row for this line/customer pair is opted_out."""
+    known = (_normalise_phone(line_number), _normalise_phone(customer_number)) in KNOWN_OPT_OUTS
+    tab = _ensure_tab(OPT_OUTS_TAB, OPT_OUTS_HEADERS)
+    if tab is None:
+        return known
+    try:
+        rows = tab.get_all_records()
+    except Exception as exc:
+        log.exception("Failed to read Opt Outs: %s", exc)
+        return known
+    line = _normalise_phone(line_number)
+    cust = _normalise_phone(customer_number)
+    latest = "opted_out" if (line, cust) in KNOWN_OPT_OUTS else None
+    for row in rows:
+        if (_normalise_phone(row.get("line_number", "")) == line
+                and _normalise_phone(row.get("customer_number", "")) == cust):
+            latest = str(row.get("status", "")).strip()
+    return latest == "opted_out"
+
+
+# ===========================================================================
 # Outbound SMS helpers
 # ===========================================================================
 
@@ -866,6 +939,9 @@ def _send_sms(from_number: str, to_number: str, body: str) -> bool:
     """Generic outbound SMS via Twilio. Best-effort."""
     if twilio_client is None:
         log.error("Cannot send SMS: Twilio client not initialised")
+        return False
+    if is_opted_out(from_number, to_number):
+        log.info("SMS suppressed: %s has opted out of texts from %s", to_number, from_number)
         return False
     try:
         twilio_client.messages.create(body=body, from_=from_number, to=to_number)
@@ -1096,6 +1172,28 @@ def sms_webhook() -> Response:
     owner = _normalise_phone(tradie.get("owner_mobile", ""))
     body_stripped = body.strip()
     body_upper = body_stripped.upper()
+
+    # Opt-out / opt-in keywords are handled before anything else: no AI reply,
+    # one confirmation, owner told, all further texts to this number suppressed.
+    if is_opt_out_keyword(body_stripped):
+        log.info("Opt-out from %s to %s (%s)", from_number, to_number, business)
+        record_opt_status(to_number, from_number, "opted_out", body_stripped)
+        log_conversation(business, from_number, to_number, body, "[opted out]", False)
+        send_to_owner(tradie, f"{from_number} replied {body_stripped!r} to {business} "
+                              f"and is now opted out of texts from this number.")
+        return _twiml_message(OPT_OUT_CONFIRMATION)
+    if is_opt_in_keyword(body_stripped) and is_opted_out(to_number, from_number):
+        log.info("Opt-in from %s to %s (%s)", from_number, to_number, business)
+        record_opt_status(to_number, from_number, "opted_in", body_stripped)
+        log_conversation(business, from_number, to_number, body, "[opted in]", False)
+        return _twiml_message(OPT_IN_CONFIRMATION)
+    if is_opted_out(to_number, from_number):
+        # They opted out but wrote again with a real message: log it and tell
+        # the owner, but Joe does not reply until they text START.
+        log.info("Message from opted-out %s to %s; forwarding only", from_number, to_number)
+        log_conversation(business, from_number, to_number, body, "[opted out, no reply]", False)
+        send_to_owner(tradie, f"Opted-out number {from_number} texted {business}: {body_stripped[:300]}")
+        return _twiml_empty()
     if sender == owner and (body_upper.startswith("MUTE") or body_upper.startswith("UNMUTE")):
         log.info("Tradie command from owner: %r", body_stripped)
         confirmation = handle_tradie_command(tradie, body_stripped)
