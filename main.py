@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import random
+import re
 import secrets
 import time
 import urllib.parse
@@ -16,7 +17,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from html import escape as xml_escape
-from threading import Lock, Timer
+from threading import Lock, Thread, Timer
 from typing import Optional
 
 import gspread
@@ -48,7 +49,17 @@ ASSISTANT_NAME = "Joe"
 
 VOICE_NAME = "Google.en-AU-Neural2-C"
 VOICE_LANG = "en-AU"
-SPEECH_TIMEOUT_SECONDS = "2"  # seconds of silence before Twilio considers speech over
+# Voice turn-taking. Every second here is dead air the caller hears after
+# they stop talking, so keep it tight. Deepgram Nova-3 endpoints faster than
+# Google's experimental_conversations model and supports en-AU. Twilio
+# requires a positive integer speechTimeout whenever speechModel is set.
+SPEECH_TIMEOUT_SECONDS = "1"  # seconds of silence before Twilio considers speech over
+SPEECH_MODEL = "deepgram_nova-3"
+# Hard ceiling on the Claude call during a live call. If it is slower than
+# this the caller gets the fallback line instead of 10+ seconds of silence.
+VOICE_LLM_TIMEOUT_SECONDS = 6.0
+# How long to wait for an answer to "anything else?" before saying goodbye.
+CLOSING_GATHER_TIMEOUT_SECONDS = "4"
 
 CONVERSATION_LOG_TAB = "Conversation Log"
 CONVERSATION_LOG_HEADERS = [
@@ -389,7 +400,9 @@ VOICE_PLAYBOOK = (
     "3. Ask them to text this same number with their name, suburb, and a "
     "brief description of the job, and tell them the tradie will call them "
     "back within the hour\n"
-    "4. End your reply with ##END## on its own line so the call wraps cleanly\n"
+    "4. End your reply with ##END## on its own line. The system will then ask "
+    "the caller if there is anything else and say goodbye properly, so do NOT "
+    "say goodbye or ask 'anything else' yourself\n"
     "\n"
     "Example reply: 'Yep, we handle hot water systems all the time. To make "
     "sure we get your details right, could you text us at this number with "
@@ -526,7 +539,8 @@ WORKBENCH_VOICE_PLAYBOOK = (
     "Do NOT try to take names, suburbs, emails or addresses by voice, phone "
     f"transcription mangles them. Get them over SMS.\n"
     f"When the conversation has a natural end point, finish your reply with "
-    f"{END_TAG} on its own line."
+    f"{END_TAG} on its own line. The system then asks if there is anything "
+    f"else and says goodbye, so do not say goodbye yourself."
 )
 
 WORKBENCH_VOICE_INSTRUCTION = (
@@ -1060,7 +1074,11 @@ def generate_reply(tradie: dict, user_message: str, history: list[dict], channel
     messages = history + [{"role": "user", "content": user_message}]
 
     try:
-        resp = anthropic_client.messages.create(
+        # On a live call a slow or retried request is dead air, so voice gets
+        # a hard timeout and no automatic retries (the fallback line covers it).
+        llm = (anthropic_client.with_options(timeout=VOICE_LLM_TIMEOUT_SECONDS, max_retries=0)
+               if channel == "voice" else anthropic_client)
+        resp = llm.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=120 if channel == "voice" else 200,
             system=system_prompt,
@@ -1099,13 +1117,123 @@ def _voice_say(text: str) -> str:
     )
 
 
-def _voice_gather(action: str, prompt: Optional[str] = None) -> str:
+def _voice_gather(action: str, prompt: Optional[str] = None,
+                  timeout: Optional[str] = None) -> str:
     inner = _voice_say(prompt) if prompt else ""
+    timeout_attr = f'timeout="{xml_escape(timeout)}" ' if timeout else ""
     return (
         f'<Gather input="speech" action="{xml_escape(action)}" method="POST" '
         f'speechTimeout="{xml_escape(SPEECH_TIMEOUT_SECONDS)}" '
+        f'{timeout_attr}'
         f'language="{xml_escape(VOICE_LANG)}" '
-        f'speechModel="experimental_conversations">{inner}</Gather>'
+        f'speechModel="{xml_escape(SPEECH_MODEL)}">{inner}</Gather>'
+    )
+
+
+def _voice_goodbye(tradie: dict) -> str:
+    """Spoken sign-off so the call ends like a receptionist would end it,
+    not a mid-sentence hang up."""
+    if _is_workbench_line(tradie):
+        name = "Workbench"
+    else:
+        name = (tradie.get("business_name") or "us").strip()
+    return f"Thanks for calling {name}. Have a great day. Goodbye."
+
+
+# Short replies to "anything else?" that mean the caller is done.
+_CLOSING_DONE_WORDS = (
+    "no", "nope", "nah", "nothing", "that's it", "thats it", "that's all",
+    "thats all", "that is all", "all good", "i'm good", "im good", "i'm right",
+    "thanks", "thank you", "cheers", "bye", "goodbye", "see ya", "no worries",
+    "that's everything", "all sorted", "sweet", "perfect", "great", "okay", "ok",
+)
+
+
+def _is_closing_done(speech: str) -> bool:
+    text = (speech or "").strip().lower()
+    if not text:
+        return True
+    if "?" in text:
+        return False
+    words = re.findall(r"[a-z']+", text)
+    if len(words) > 6:
+        return False
+    if any(w in words for w in ("but", "actually", "also", "just", "can", "could", "what", "how", "when")):
+        return False
+    padded = " " + " ".join(words) + " "
+    return any(f" {w} " in padded for w in _CLOSING_DONE_WORDS)
+
+
+def _voice_close(call_sid: str, state: dict, reply: str, ended_reason: str) -> Response:
+    """Say the final reply, then ask if there is anything else before hanging
+    up. The call is finalised now (owner summary + caller SMS handoff) so
+    nothing is lost if the caller hangs up during the question."""
+    tradie = state["tradie"]
+    _finalise_call(call_sid, state, ended_reason=ended_reason)
+    with _voice_state_lock:
+        _voice_state[call_sid] = {
+            "tradie": tradie,
+            "from": state["from"],
+            "to": state["to"],
+            "history": state["history"],
+            "transcript_lines": [],
+            "turn_count": state["turn_count"],
+            "ended": True,
+            "closing": True,
+        }
+    prompt = f"{reply} Is there anything else I can help you with?".strip()
+    return _twiml_voice(
+        _voice_gather(action="/voice/turn", prompt=prompt,
+                      timeout=CLOSING_GATHER_TIMEOUT_SECONDS),
+        _voice_say(_voice_goodbye(tradie)),
+        '<Pause length="1"/>',
+        "<Hangup/>",
+    )
+
+
+def _voice_closing_turn(call_sid: str, state: dict, speech: str) -> Response:
+    """Caller answered "anything else?". Say goodbye, or answer one last
+    thing, pass it to the owner, then say goodbye."""
+    tradie = state["tradie"]
+    goodbye = _voice_goodbye(tradie)
+    with _voice_state_lock:
+        _voice_state.pop(call_sid, None)
+
+    if _is_closing_done(speech):
+        return _twiml_voice(_voice_say(goodbye), '<Pause length="1"/>', "<Hangup/>")
+
+    raw_reply = generate_reply(tradie, speech, state["history"], channel="voice")
+    is_urgent = URGENT_TAG in raw_reply
+    clean_reply = raw_reply.replace(URGENT_TAG, "").replace(END_TAG, "").strip()
+
+    if is_urgent:
+        owner = _normalise_phone(tradie.get("owner_mobile", ""))
+        send_urgent_alert(tradie, state["from"], speech, clean_reply, channel="voice")
+        if owner:
+            return _twiml_voice(
+                _voice_say(clean_reply),
+                _voice_say("Putting you through to the tradie now. Hold on."),
+                f'<Dial timeout="20" callerId="{xml_escape(_normalise_phone(state["to"]))}">'
+                f'{xml_escape(owner)}</Dial>',
+                _voice_say("They didn't pick up just then, but they've been alerted by text and will call you straight back."),
+                "<Hangup/>",
+            )
+        return _twiml_voice(
+            _voice_say(clean_reply),
+            _voice_say("I've alerted the tradie and they'll call you straight back."),
+            "<Hangup/>",
+        )
+
+    send_to_owner(
+        tradie,
+        f"Voice call follow-up from {state['from']}\n"
+        f"Customer: {speech}\n{ASSISTANT_NAME}: {clean_reply}",
+    )
+    return _twiml_voice(
+        _voice_say(clean_reply),
+        _voice_say(goodbye),
+        '<Pause length="1"/>',
+        "<Hangup/>",
     )
 
 
@@ -1285,6 +1413,10 @@ def voice_turn() -> Response:
         )
 
     tradie = state["tradie"]
+
+    if state.get("closing"):
+        return _voice_closing_turn(call_sid, state, speech)
+
     state["turn_count"] += 1
 
     if not speech:
@@ -1303,7 +1435,10 @@ def voice_turn() -> Response:
             )
 
     state["transcript_lines"].append(f"Customer: {speech}")
+    t0 = time.monotonic()
     raw_reply = generate_reply(tradie, speech, state["history"], channel="voice")
+    log.info("Voice turn timing | CallSid=%s llm_ms=%d", call_sid,
+             int((time.monotonic() - t0) * 1000))
 
     is_urgent = URGENT_TAG in raw_reply
     is_end = END_TAG in raw_reply
@@ -1336,11 +1471,8 @@ def voice_turn() -> Response:
             )
 
     if is_end or state["turn_count"] >= VOICE_TURN_LIMIT:
-        _finalise_call(call_sid, state, ended_reason=("end_tag" if is_end else "turn_limit"))
-        return _twiml_voice(
-            _voice_say(clean_reply),
-            "<Hangup/>",
-        )
+        return _voice_close(call_sid, state, clean_reply,
+                            ended_reason=("end_tag" if is_end else "turn_limit"))
 
     return _twiml_voice(
         _voice_gather(action="/voice/turn", prompt=clean_reply),
@@ -1360,6 +1492,9 @@ def voice_status() -> Response:
 
     if state and not state.get("ended"):
         _finalise_call(call_sid, state, ended_reason=f"twilio_status:{call_status}")
+    elif state and call_status in ("completed", "busy", "failed", "no-answer", "canceled"):
+        with _voice_state_lock:
+            _voice_state.pop(call_sid, None)
 
     return _twiml_empty()
 
@@ -1377,7 +1512,24 @@ def _finalise_call(call_sid: str, state: dict, ended_reason: str) -> None:
     log.info("Finalising call %s (reason=%s, turns=%d)",
              call_sid, ended_reason, state["turn_count"])
 
+    # Sheets logging and the owner SMS take a second or two each. They used
+    # to run before the final TwiML was returned, which the caller heard as
+    # a long silence before Joe's last line. Run them off the request thread.
     if transcript_lines:
+        Thread(
+            target=_finalise_call_side_effects,
+            args=(tradie, business, dict(state), list(transcript_lines), transcript, ended_reason),
+            daemon=True,
+        ).start()
+
+    with _voice_state_lock:
+        _voice_state.pop(call_sid, None)
+
+
+def _finalise_call_side_effects(tradie: dict, business: str, state: dict,
+                                transcript_lines: list[str], transcript: str,
+                                ended_reason: str) -> None:
+    try:
         log_conversation(
             business_name=business,
             from_number=state["from"],
@@ -1405,9 +1557,8 @@ def _finalise_call(call_sid: str, state: dict, ended_reason: str) -> None:
                 "Caller handoff SMS scheduled in %ds for %s",
                 delay, state["from"],
             )
-
-    with _voice_state_lock:
-        _voice_state.pop(call_sid, None)
+    except Exception as exc:
+        log.exception("Voice call finalise side effects failed: %s", exc)
 
 
 # ============================================================================
