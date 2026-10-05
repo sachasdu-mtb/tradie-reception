@@ -68,7 +68,7 @@ CLOSING_GATHER_TIMEOUT_SECONDS = "4"
 # Twilio's TTS cache serves them with no synthesis delay.
 VOICE_ACKS = ("Okay.", "Righto.", "Got it.", "Yep, okay.")
 # Skip the ack when the caller asks if Joe is AI: the first thing they hear
-# must be "Yes, I am AI".
+# must be the disclosure ("No, I am AI" / "Yes, I am AI"), not "Righto."
 _AI_QUESTION_RE = re.compile(
     r"\b(ai|a\.i\.?|robot|bot|computer|machine|automated|real person|human)\b", re.I)
 # Hard ceiling on sentences spoken per turn. Long replies take longer to
