@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from html import escape as xml_escape
+from concurrent.futures import ThreadPoolExecutor
 from threading import Lock, Thread, Timer
 from typing import Optional
 
@@ -60,6 +61,21 @@ SPEECH_MODEL = "deepgram_nova-3"
 VOICE_LLM_TIMEOUT_SECONDS = 6.0
 # How long to wait for an answer to "anything else?" before saying goodbye.
 CLOSING_GATHER_TIMEOUT_SECONDS = "4"
+# Instant acknowledgement. Claude takes ~1.5-4.5s per turn (Twilio webhook
+# timings, Oct 2026). Instead of silence, /voice/turn answers straight away
+# with a short "Righto." and starts Claude in the background; Twilio then
+# fetches /voice/reply, which waits for the real answer. Fixed phrases so
+# Twilio's TTS cache serves them with no synthesis delay.
+VOICE_ACKS = ("Okay.", "Righto.", "Got it.", "Yep, okay.")
+# Skip the ack when the caller asks if Joe is AI: the first thing they hear
+# must be the disclosure ("No, I am AI" / "Yes, I am AI"), not "Righto."
+_AI_QUESTION_RE = re.compile(
+    r"\b(ai|a\.i\.?|robot|bot|computer|machine|automated|real person|human)\b", re.I)
+# Hard ceiling on sentences spoken per turn. Long replies take longer to
+# generate and to synthesise. Three, not two, because the Workbench script
+# is answer + one question + SMS handoff.
+VOICE_MAX_SENTENCES = 3
+_voice_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="voice-llm")
 
 CONVERSATION_LOG_TAB = "Conversation Log"
 CONVERSATION_LOG_HEADERS = [
@@ -382,7 +398,8 @@ SMS_PLAYBOOK = (
 
 VOICE_INSTRUCTION = (
     "IMPORTANT: You are on a phone call with the customer right now. Speak "
-    "naturally and concisely — 1 to 2 short sentences per turn, never more. "
+    "naturally and concisely — 1 to 2 short sentences per turn, under 35 "
+    "words in total, never more. "
     "Aussie tone, friendly and professional.\n"
     "\n"
     "Do NOT use formatting, lists, asterisks, headers, or symbols. Plain "
@@ -544,7 +561,8 @@ WORKBENCH_VOICE_PLAYBOOK = (
 
 WORKBENCH_VOICE_INSTRUCTION = (
     "IMPORTANT: You are on a phone call right now. Speak naturally and "
-    "concisely, 1 to 2 short sentences per turn, never more.\n"
+    "concisely, short sentences, under 35 words per turn in total, never "
+    "more.\n"
     "No formatting, lists, asterisks or symbols. Plain spoken English, your "
     "words are read aloud.\n"
     "Speak numbers and prices as a person would say them out loud "
@@ -1079,7 +1097,7 @@ def generate_reply(tradie: dict, user_message: str, history: list[dict], channel
                if channel == "voice" else anthropic_client)
         resp = llm.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=120 if channel == "voice" else 200,
+            max_tokens=100 if channel == "voice" else 200,
             system=system_prompt,
             messages=messages,
         )
@@ -1195,15 +1213,23 @@ def _voice_closing_turn(call_sid: str, state: dict, speech: str) -> Response:
     thing, pass it to the owner, then say goodbye."""
     tradie = state["tradie"]
     goodbye = _voice_goodbye(tradie)
+
+    if _is_closing_done(speech):
+        with _voice_state_lock:
+            _voice_state.pop(call_sid, None)
+        return _twiml_voice(_voice_say(goodbye), '<Pause length="1"/>', "<Hangup/>")
+
+    return _voice_ack_and_think(call_sid, state, speech, closing=True)
+
+
+def _voice_closing_reply(call_sid: str, state: dict, speech: str, raw_reply: str) -> Response:
+    tradie = state["tradie"]
+    goodbye = _voice_goodbye(tradie)
     with _voice_state_lock:
         _voice_state.pop(call_sid, None)
 
-    if _is_closing_done(speech):
-        return _twiml_voice(_voice_say(goodbye), '<Pause length="1"/>', "<Hangup/>")
-
-    raw_reply = generate_reply(tradie, speech, state["history"], channel="voice")
     is_urgent = URGENT_TAG in raw_reply
-    clean_reply = raw_reply.replace(URGENT_TAG, "").replace(END_TAG, "").strip()
+    clean_reply = _cap_sentences(raw_reply.replace(URGENT_TAG, "").replace(END_TAG, "").strip())
 
     if is_urgent:
         owner = _normalise_phone(tradie.get("owner_mobile", ""))
@@ -1434,14 +1460,76 @@ def voice_turn() -> Response:
             )
 
     state["transcript_lines"].append(f"Customer: {speech}")
+    return _voice_ack_and_think(call_sid, state, speech, closing=False)
+
+
+def _cap_sentences(text: str, limit: int = VOICE_MAX_SENTENCES) -> str:
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return " ".join(parts[:limit]).strip() if len(parts) > limit else text.strip()
+
+
+def _timed_voice_reply(call_sid: str, tradie: dict, speech: str, history: list[dict]) -> str:
     t0 = time.monotonic()
-    raw_reply = generate_reply(tradie, speech, state["history"], channel="voice")
+    reply = generate_reply(tradie, speech, history, channel="voice")
     log.info("Voice turn timing | CallSid=%s llm_ms=%d", call_sid,
              int((time.monotonic() - t0) * 1000))
+    return reply
 
+
+def _pick_voice_ack(state: dict, speech: str) -> Optional[str]:
+    if _AI_QUESTION_RE.search(speech or ""):
+        return None
+    choices = [a for a in VOICE_ACKS if a != state.get("last_ack")] or list(VOICE_ACKS)
+    ack = random.choice(choices)
+    state["last_ack"] = ack
+    return ack
+
+
+def _voice_ack_and_think(call_sid: str, state: dict, speech: str, closing: bool) -> Response:
+    """Start Claude in the background and answer Twilio straight away with a
+    short ack, then send it to /voice/reply to pick up the real answer."""
+    future = _voice_executor.submit(_timed_voice_reply, call_sid, state["tradie"],
+                                    speech, list(state["history"]))
+    state["pending"] = {"future": future, "speech": speech, "closing": closing,
+                        "t0": time.monotonic()}
+    ack = _pick_voice_ack(state, speech)
+    elements = [_voice_say(ack)] if ack else []
+    elements.append('<Redirect method="POST">/voice/reply</Redirect>')
+    return _twiml_voice(*elements)
+
+
+@app.route("/voice/reply", methods=["POST"])
+def voice_reply() -> Response:
+    call_sid = request.form.get("CallSid", "")
+    with _voice_state_lock:
+        state = _voice_state.get(call_sid)
+        pending = state.pop("pending", None) if state else None
+
+    if not state or not pending:
+        log.warning("No pending reply for CallSid=%s; ending call", call_sid)
+        return _twiml_voice(
+            _voice_say("Sorry, something went wrong. The tradie will call you back."),
+            "<Hangup/>",
+        )
+
+    try:
+        raw_reply = pending["future"].result(timeout=VOICE_LLM_TIMEOUT_SECONDS + 2)
+    except Exception as exc:
+        log.exception("Voice reply failed for CallSid=%s: %s", call_sid, exc)
+        raw_reply = "Sorry, I'm having a bit of trouble. The tradie will call you back shortly."
+    log.info("Voice reply ready | CallSid=%s wait_ms=%d", call_sid,
+             int((time.monotonic() - pending["t0"]) * 1000))
+
+    if pending["closing"]:
+        return _voice_closing_reply(call_sid, state, pending["speech"], raw_reply)
+    return _voice_turn_reply(call_sid, state, pending["speech"], raw_reply)
+
+
+def _voice_turn_reply(call_sid: str, state: dict, speech: str, raw_reply: str) -> Response:
+    tradie = state["tradie"]
     is_urgent = URGENT_TAG in raw_reply
     is_end = END_TAG in raw_reply
-    clean_reply = raw_reply.replace(URGENT_TAG, "").replace(END_TAG, "").strip()
+    clean_reply = _cap_sentences(raw_reply.replace(URGENT_TAG, "").replace(END_TAG, "").strip())
 
     state["transcript_lines"].append(f"Joe: {clean_reply}")
     state["history"].append({"role": "user", "content": speech})

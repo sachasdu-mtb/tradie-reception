@@ -32,6 +32,17 @@ def check(label, condition):
     return condition
 
 
+def turn(c, sid, speech):
+    """POST /voice/turn and, if Joe acks and redirects, follow to /voice/reply.
+    Returns (ack_xml, reply_xml)."""
+    r = c.post("/voice/turn", data={"CallSid": sid, "SpeechResult": speech})
+    x = r.get_data(as_text=True)
+    if "/voice/reply</Redirect>" not in x:
+        return x, x
+    r2 = c.post("/voice/reply", data={"CallSid": sid})
+    return x, r2.get_data(as_text=True)
+
+
 def main_tests():
     results = []
     sent_owner = []
@@ -62,9 +73,10 @@ def main_tests():
     results.append(check("no experimental_conversations", "experimental_conversations" not in x))
 
     t0 = time.monotonic()
-    r = c.post("/voice/turn", data={"CallSid": sid, "SpeechResult": "My drain is blocked, can you send someone out?"})
+    ack, x = turn(c, sid, "My drain is blocked, can you send someone out?")
     elapsed = time.monotonic() - t0
-    x = r.get_data(as_text=True)
+    results.append(check("turn answers with an instant ack", any(a in ack for a in main.VOICE_ACKS)))
+    results.append(check("ack redirects to /voice/reply", ack.rstrip().endswith('<Redirect method="POST">/voice/reply</Redirect></Response>')))
     results.append(check(f"END turn does not wait on Sheets logging ({elapsed:.2f}s)", elapsed < 1.0))
     results.append(check("END turn asks anything else", "anything else I can help you with" in x))
     results.append(check("END turn keeps listening (Gather)", x.index("<Gather") < x.index("anything else")))
@@ -74,8 +86,7 @@ def main_tests():
     results.append(check("##END## tag not spoken", "##END##" not in x))
     results.append(check("closing gather has short timeout", 'timeout="4"' in x))
 
-    r = c.post("/voice/turn", data={"CallSid": sid, "SpeechResult": "No, that's all, thanks."})
-    x = r.get_data(as_text=True)
+    _, x = turn(c, sid, "No, that's all, thanks.")
     results.append(check("'no thanks' gets goodbye", "Have a great day. Goodbye." in x))
     results.append(check("goodbye has pause before hangup", '<Pause length="1"/><Hangup/>' in x))
     results.append(check("no second Gather after goodbye", "<Gather" not in x))
@@ -88,9 +99,8 @@ def main_tests():
     ])
     main.generate_reply = lambda *a, **k: next(replies2)
     c.post("/voice", data={"CallSid": sid2, "From": CALLER, "To": LINE})
-    c.post("/voice/turn", data={"CallSid": sid2, "SpeechResult": "Hot water is out"})
-    r = c.post("/voice/turn", data={"CallSid": sid2, "SpeechResult": "Actually, do you work Saturdays?"})
-    x = r.get_data(as_text=True)
+    turn(c, sid2, "Hot water is out")
+    _, x = turn(c, sid2, "Actually, do you work Saturdays?")
     results.append(check("follow-up question answered", "Saturday call outs" in x))
     results.append(check("then goodbye and hangup", "Goodbye." in x and "<Hangup/>" in x))
     results.append(check("follow-up passed to owner", any("do you work Saturdays" in b for b in sent_owner)))
@@ -99,9 +109,8 @@ def main_tests():
     sid3 = "CA_test_silent"
     main.generate_reply = lambda *a, **k: "Text us your details please.\n##END##"
     c.post("/voice", data={"CallSid": sid3, "From": CALLER, "To": LINE})
-    c.post("/voice/turn", data={"CallSid": sid3, "SpeechResult": "Leaking tap"})
-    r = c.post("/voice/turn", data={"CallSid": sid3, "SpeechResult": ""})
-    x = r.get_data(as_text=True)
+    turn(c, sid3, "Leaking tap")
+    _, x = turn(c, sid3, "")
     results.append(check("silence at close gets goodbye", "Goodbye." in x and "<Gather" not in x))
 
     # Closing classifier.
@@ -109,6 +118,27 @@ def main_tests():
                     ("ok but can you come Tuesday", False), ("what time will he come?", False),
                     ("my hot water system is also leaking under the house", False)]:
         results.append(check(f"closing done {s!r} -> {want}", main._is_closing_done(s) is want))
+
+    # Ack is instant even when Claude is slow; the AI question gets no ack.
+    sid4 = "CA_test_slow"
+    def slow_reply(*a, **k):
+        time.sleep(1.5)
+        return "Yes, I am AI. I'm Joe, I answer calls for the business. One. Two. Three."
+    main.generate_reply = slow_reply
+    c.post("/voice", data={"CallSid": sid4, "From": CALLER, "To": LINE})
+    t0 = time.monotonic()
+    r = c.post("/voice/turn", data={"CallSid": sid4, "SpeechResult": "Is this a real person?"})
+    fast = time.monotonic() - t0
+    ack = r.get_data(as_text=True)
+    results.append(check(f"ack returned before Claude finishes ({fast:.2f}s)", fast < 0.5))
+    results.append(check("no ack before an 'are you AI' answer", "<Say" not in ack and "/voice/reply" in ack))
+    x = c.post("/voice/reply", data={"CallSid": sid4}).get_data(as_text=True)
+    results.append(check("reply starts 'Yes, I am AI'", "<Say voice=\"Google.en-AU-Neural2-C\" language=\"en-AU\">Yes, I am AI." in x))
+    results.append(check("reply capped at 3 sentences", "One." in x and "Two." not in x))
+    results.append(check("ack phrases never repeat back to back",
+                         all(main._pick_voice_ack(st, "x") != main._pick_voice_ack(st, "x") for st in [{}] * 1)))
+    x = c.post("/voice/reply", data={"CallSid": "CA_unknown"}).get_data(as_text=True)
+    results.append(check("reply with no pending turn hangs up cleanly", "<Hangup/>" in x))
 
     time.sleep(2.5)
     results.append(check("call still logged to Sheets in background", len(finalise_calls) == 3))
