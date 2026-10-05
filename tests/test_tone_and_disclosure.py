@@ -1,7 +1,9 @@
 """Tone and AI-disclosure rules must be in every prompt, client lines included.
 
 Sacha's rule (17 Aug 2026): no casual slang like "nah mate", and if anyone
-asks whether Joe is AI, she says "yes, I am AI" straight up.
+asks whether Joe is AI, she says "yes, I am AI" straight up. If asked whether
+she is a real person, she says "No, I am AI" (6 Oct 2026: "Yes, I am AI" to
+"are you a real person?" contradicted itself).
 
 Run: GOOGLE_SHEET_ID=x TWILIO_ACCOUNT_SID=x TWILIO_AUTH_TOKEN=x \
      ANTHROPIC_API_KEY=x python tests/test_tone_and_disclosure.py
@@ -42,7 +44,11 @@ def run():
                   "TONE AND DISCLOSURE" in p)
             check(f"[{name}/{channel}] bans slang", "'mate'" in p and "'nah'" in p)
             check(f"[{name}/{channel}] discloses AI",
-                  "yes, you are AI" in p and "Never claim to be human" in p)
+                  "you are AI" in p and "Never claim to be human" in p)
+            check(f"[{name}/{channel}] real-person question -> 'No, I am AI'",
+                  "real person" in p and "'No, I am AI.'" in p)
+            check(f"[{name}/{channel}] AI question -> 'Yes, I am AI'",
+                  "'Yes, I am AI.'" in p)
             check(f"[{name}/{channel}] first-ask disclosure, no deflection",
                   "answer straight away and without hedging" in p
                   and "first sentence" in p and "do not deflect" in p)
