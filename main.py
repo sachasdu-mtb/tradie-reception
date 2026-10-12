@@ -570,6 +570,38 @@ WORKBENCH_VOICE_INSTRUCTION = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Public demo line (0485 067 607). Joe role-plays a fictional plumber so
+# tradies can test her. Real people also text and ring it (group admins,
+# suppliers, people looking for Sacha), and they must not get a fake
+# plumbing business. The block below lets Joe step out of character for them
+# and flags the message to the owner via the urgent alert.
+# ---------------------------------------------------------------------------
+
+DEMO_LINE_NUMBERS = {"+61485067607"}
+
+DEMO_LINE_ESCAPE = (
+    "THIS IS THE WORKBENCH PUBLIC DEMO LINE. The business above is fictional. "
+    "Most people here are tradies testing you by pretending to be a customer: "
+    "stay fully in character for them, even if they say it is a test job.\n"
+    "Step OUT of character only when the message is clearly not a customer "
+    "enquiry for the business above, for example: someone asking for Sacha or "
+    "Workbench by name, an invitation to a group or event, a supplier or sales "
+    "pitch, a partnership or media request, or a direct question about buying "
+    "the AI receptionist itself (price, setup, how to get it for their own "
+    "business). In that case reply plainly: this is the demo line for Joe, the "
+    "AI receptionist built by Workbench, the plumbing business is made up, and "
+    "Sacha runs Workbench and can be reached on 0485 050 078 or "
+    "hello@workbenchhq.com.au. Reception is $150 a month plus $400 setup, no "
+    "lock-in. Never accept or decline invitations or offers on anyone's "
+    f"behalf. End that reply with {URGENT_TAG} on its own line so Sacha sees it."
+)
+
+
+def _is_demo_line(tradie: dict) -> bool:
+    return _normalise_phone(tradie.get("phone_number", "")) in DEMO_LINE_NUMBERS
+
+
 def _is_workbench_line(tradie: dict) -> bool:
     return _normalise_phone(tradie.get("phone_number", "")) in WORKBENCH_LINE_NUMBERS
 
@@ -619,6 +651,10 @@ def _build_system_prompt(tradie: dict, channel: str) -> str:
         parts.append(SMS_PLAYBOOK)
         parts.append("")
         parts.append(SMS_INSTRUCTION)
+
+    if _is_demo_line(tradie):
+        parts.append("")
+        parts.append(DEMO_LINE_ESCAPE)
 
     return "\n".join(parts)
 
