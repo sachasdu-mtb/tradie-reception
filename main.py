@@ -1404,6 +1404,11 @@ def sms_webhook() -> Response:
 
     if is_urgent:
         send_urgent_alert(tradie, from_number, body, clean_reply, channel="sms")
+    elif _is_workbench_line(tradie) and sender != owner:
+        # Front desk: Joe promises Sacha will come back, so Sacha sees every text.
+        send_to_owner(tradie, f"Front desk text from {from_number}\n"
+                              f"Said: {body_stripped[:600]}\n"
+                              f"Joe replied: {clean_reply}")
 
     return _twiml_message(clean_reply)
 
