@@ -6,3 +6,4 @@ gspread>=6.0.0
 google-auth>=2.25.0
 requests>=2.31.0
 cryptography>=42.0.0
+certifi>=2026.10.19
