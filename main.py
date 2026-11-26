@@ -26,7 +26,7 @@ import requests
 from anthropic import Anthropic
 from flask import (
     Flask, request, Response, render_template, redirect, url_for,
-    session, flash, abort, jsonify,
+    session, flash, abort, jsonify, has_request_context,
 )
 from google.oauth2.service_account import Credentials
 from twilio.rest import Client as TwilioClient
@@ -50,6 +50,10 @@ ASSISTANT_NAME = "Joe"
 
 VOICE_NAME = "Google.en-AU-Neural2-C"
 VOICE_LANG = "en-AU"
+# US lines (+1 numbers, USA market test from Nov 2026) get a US voice and
+# US speech recognition. Joe is female in both markets.
+US_VOICE_NAME = "Google.en-US-Neural2-F"
+US_VOICE_LANG = "en-US"
 # Voice turn-taking. Every second here is dead air the caller hears after
 # they stop talking, so keep it tight. Deepgram Nova-3 endpoints faster than
 # Google's experimental_conversations model and supports en-AU. Twilio
@@ -578,7 +582,9 @@ WORKBENCH_VOICE_INSTRUCTION = (
 # and flags the message to the owner via the urgent alert.
 # ---------------------------------------------------------------------------
 
-DEMO_LINE_NUMBERS = {"+61485067607"}
+# +14695186052 = US demo line (Dallas), voice only: no A2P 10DLC
+# registration, so outbound US texts from it would be carrier-blocked.
+DEMO_LINE_NUMBERS = {"+61485067607", "+14695186052"}
 
 DEMO_LINE_ESCAPE = (
     "THIS IS THE WORKBENCH PUBLIC DEMO LINE. The business above is fictional. "
@@ -596,6 +602,51 @@ DEMO_LINE_ESCAPE = (
     "lock-in. Never accept or decline invitations or offers on anyone's "
     f"behalf. End that reply with {URGENT_TAG} on its own line so Sacha sees it."
 )
+
+
+US_DEMO_LINE_ESCAPE = (
+    "THIS IS THE WORKBENCH PUBLIC DEMO LINE FOR THE UNITED STATES. The business "
+    "above is fictional. Most callers are contractors testing you by pretending "
+    "to be a customer: stay fully in character for them, even if they say it is "
+    "a test job.\n"
+    "Step OUT of character only when the caller is clearly not a customer for "
+    "the business above, for example: someone asking for Sacha or Workbench by "
+    "name, a supplier or sales pitch, a media request, or a direct question "
+    "about buying the AI receptionist itself (price, setup, how to get it for "
+    "their own business). In that case reply plainly: this is the demo line for "
+    "Joe, the AI receptionist built by Workbench, the plumbing business is made "
+    "up, and Sacha runs Workbench and can be reached at hello@workbenchhq.com.au "
+    "or workbenchhq.com.au/us. Reception is 150 US dollars a month plus 400 US "
+    "dollars setup, no contract, and if Joe does not catch a job in the first 30 "
+    "days you do not pay. Never accept or decline invitations or offers on "
+    f"anyone's behalf. End that reply with {URGENT_TAG} on its own line so "
+    "Sacha sees it."
+)
+
+US_LOCALE_INSTRUCTION = (
+    "LOCALE: This business is in the United States (Dallas-Fort Worth, Texas, "
+    "US Central Time). This overrides any instruction above about Australian "
+    "English: speak plain, polite American English with US spelling and US "
+    "terms (cell phone, ZIP code, faucet, water heater, garbage disposal). "
+    "Never use Australian expressions such as G'day, arvo, mate or no worries. "
+    "Prices are in US dollars."
+)
+
+
+def _is_us_number(value) -> bool:
+    return _normalise_phone(value or "").startswith("+1")
+
+
+def _current_voice_locale() -> tuple[str, str]:
+    """US voice when the call being handled is to a +1 number. Every voice
+    webhook from Twilio carries To, so the request decides the locale; outside
+    a request (background threads) fall back to the Australian voice."""
+    try:
+        if has_request_context() and _is_us_number(request.values.get("To", "")):
+            return US_VOICE_NAME, US_VOICE_LANG
+    except Exception:
+        pass
+    return VOICE_NAME, VOICE_LANG
 
 
 def _is_demo_line(tradie: dict) -> bool:
@@ -652,9 +703,14 @@ def _build_system_prompt(tradie: dict, channel: str) -> str:
         parts.append("")
         parts.append(SMS_INSTRUCTION)
 
+    is_us = _is_us_number(tradie.get("phone_number", ""))
+    if is_us:
+        parts.append("")
+        parts.append(US_LOCALE_INSTRUCTION)
+
     if _is_demo_line(tradie):
         parts.append("")
-        parts.append(DEMO_LINE_ESCAPE)
+        parts.append(US_DEMO_LINE_ESCAPE if is_us else DEMO_LINE_ESCAPE)
 
     return "\n".join(parts)
 
@@ -1165,7 +1221,8 @@ def _twiml_empty() -> Response:
 
 def _voice_say(text: str) -> str:
     return (
-        f'<Say voice="{xml_escape(VOICE_NAME)}" language="{xml_escape(VOICE_LANG)}">'
+        f'<Say voice="{xml_escape(_current_voice_locale()[0])}" '
+        f'language="{xml_escape(_current_voice_locale()[1])}">'
         f'{xml_escape(text)}</Say>'
     )
 
@@ -1178,7 +1235,7 @@ def _voice_gather(action: str, prompt: Optional[str] = None,
         f'<Gather input="speech" action="{xml_escape(action)}" method="POST" '
         f'speechTimeout="{xml_escape(SPEECH_TIMEOUT_SECONDS)}" '
         f'{timeout_attr}'
-        f'language="{xml_escape(VOICE_LANG)}" '
+        f'language="{xml_escape(_current_voice_locale()[1])}" '
         f'speechModel="{xml_escape(SPEECH_MODEL)}">{inner}</Gather>'
     )
 
@@ -1270,7 +1327,7 @@ def _voice_closing_reply(call_sid: str, state: dict, speech: str, raw_reply: str
     if is_urgent:
         owner = _normalise_phone(tradie.get("owner_mobile", ""))
         send_urgent_alert(tradie, state["from"], speech, clean_reply, channel="voice")
-        if owner:
+        if owner and not _is_us_number(state["to"]):
             return _twiml_voice(
                 _voice_say(clean_reply),
                 _voice_say("Putting you through to the tradie now. Hold on."),
@@ -1450,6 +1507,11 @@ def voice_incoming() -> Response:
             f"G'day, you've reached Workbench. I'm {ASSISTANT_NAME}. "
             "What are you after?"
         )
+    elif _is_us_number(to_number):
+        greeting = (
+            f"Hi, you've reached {business}. "
+            f"I'm {ASSISTANT_NAME}. How can I help you today?"
+        )
     else:
         greeting = (
             f"G'day, you've reached {business}. "
@@ -1582,7 +1644,7 @@ def _voice_turn_reply(call_sid: str, state: dict, speech: str, raw_reply: str) -
         send_urgent_alert(tradie, state["from"], speech, clean_reply, channel="voice")
         _finalise_call(call_sid, state, ended_reason="urgent_transfer")
 
-        if owner:
+        if owner and not _is_us_number(state["to"]):
             return _twiml_voice(
                 _voice_say(clean_reply),
                 _voice_say("Putting you through to the tradie now. Hold on."),
